@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Thug.party</title>
+<style>
+  body {margin:0;background:#111;color:#ccc;font-family:Verdana,sans-serif;}
+  header {background:#222;padding:15px;text-align:center;border-bottom:3px solid #f00;}
+  h1 {margin:0;color:#f00;font-size:2.2em;text-shadow:0 0 10px #f00;}
+  nav {background:#1a1a1a;padding:10px;overflow-x:auto;}
+  .board {display:inline-block;margin:8px;padding:12px;background:#222;border:2px solid #444;border-radius:8px;width:180px;cursor:pointer;}
+  .board:hover {background:#333;border-color:#f00;}
+  .desc {display:none;background:#000;padding:8px;border:1px solid #555;margin-top:5px;}
+  .board:hover .desc {display:block;}
+  #content {padding:20px;}
+  .thread {background:#1e1e1e;margin:20px 0;padding:15px;border:1px solid #444;border-radius:6px;}
+  .post {margin:10px 0;padding:12px;background:#262626;border-left:4px solid #777;border-radius:4px;}
+  .op {border-left:8px solid #f00;}
+  .name {font-weight:bold;}
+  .owner {color:#f00;font-weight:bold;}
+  .admin {color:#0ff;}
+  .jannie {color:#ff0;}
+  .verified {color:#0f0;}
+  .time-role {font-size:0.85em;color:#888;}
+  form {margin:25px 0;background:#222;padding:15px;border-radius:6px;}
+  input, textarea {width:100%;background:#333;color:#fff;border:1px solid #555;padding:8px;margin:8px 0;border-radius:4px;}
+  button {background:#f00;color:#fff;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:bold;}
+  button:hover {background:#ff3333;}
+  #owner-panel, #mod-panel {background:#300;padding:20px;margin:20px 0;border:2px solid #f00;border-radius:8px;display:none;}
+  #audit-log {background:#200;padding:15px;margin:10px 0;border:1px solid #f00;border-radius:6px;max-height:300px;overflow-y:auto;}
+  .report {color:#f88;cursor:pointer;font-size:0.9em;}
+  .delete {color:#f00;cursor:pointer;margin-left:15px;}
+  #raid-alert {background:#800;padding:20px;margin:20px 0;border:3px solid #f00;text-align:center;font-size:1.5em;color:#ff0;display:none;}
+  #captcha {background:#222;padding:20px;border-radius:8px;text-align:center;margin:20px 0;}
+  .cap-btn {width:80px;height:80px;margin:10px;border-radius:12px;cursor:pointer;}
+</style>
+</head>
+<body>
+<header><h1>Thug.party</h1></header>
+<nav>
+  <div class="board" data-board="qa"><strong>/qa/</strong><div class="desc">Questions & Answers</div></div>
+  <div class="board" data-board="thug"><strong>/thug/</strong><div class="desc">General thug discussion</div></div>
+  <div class="board" data-board="pol"><strong>/pol/</strong><div class="desc">Politically Incorrect</div></div>
+  <div class="board" data-board="shit"><strong>/shit/</strong><div class="desc">Shitposting</div></div>
+  <div class="board" data-board="raid"><strong>/raid/</strong><div class="desc">Raids & Operations</div></div>
+  <div class="board" data-board="spam"><strong>/spam/</strong><div class="desc">Spam and flood zone</div></div>
+</nav>
+
+<div id="raid-alert">RAID INCOMING – TOO MANY NEW USERS<br><button onclick="dismissRaid()">Not a raid</button></div>
+
+<div id="content"></div>
+
+<div id="owner-panel">
+  <h2>Owner Panel (GTAtacotruck)</h2>
+  <button onclick="siteDown()">Site Down (minutes)</button>
+  <button onclick="updateMode()">SITE UPDATED – REFRESH</button>
+  <button onclick="normalMode()">Back to Normal</button>
+  <button onclick="clearAllPosts()">Wipe All Posts</button>
+  <button onclick="grantRole()">Grant Role</button>
+  <div id="audit-log"><strong>Audit Log</strong><br></div>
+</div>
+
+<div id="mod-panel">
+  <h2>Jannie/Admin Panel</h2>
+  <div>Logged in users: <span id="users-list"></span></div>
+  <div id="reports"></div>
+</div>
+
+<script>
+// Fresh localStorage keys for clean reset
+const boards = ["qa","thug","pol","shit","raid","spam"];
+let currentBoard = "thug";
+let posts = JSON.parse(localStorage.getItem("posts_clean") || "{}");
+let reports = JSON.parse(localStorage.getItem("reports_clean") || "[]");
+let roles = JSON.parse(localStorage.getItem("roles_clean") || '{"GTAtacotruck":"owner"}');
+let accounts = JSON.parse(localStorage.getItem("accounts_clean") || '{"GTAtacotruck":{"pass":"her0in","verified":true}}');
+let audit = JSON.parse(localStorage.getItem("audit_clean") || "[]");
+let loggedUsers = JSON.parse(localStorage.getItem("loggedUsers_clean") || "{}");
+let siteStatus = JSON.parse(localStorage.getItem("siteStatus_clean") || '{"mode":"normal"}');
+
+if (siteStatus.mode === "down" && siteStatus.until > Date.now()) {
+  document.body.innerHTML = "<h1 style='color:#f00;text-align:center;margin-top:40vh'>sorry my thugs the site is down for now!</h1>";
+}
+if (siteStatus.mode === "update") {
+  document.body.innerHTML = "<h1 style='color:#ff0;text-align:center;margin-top:40vh'>SITE HAS BEEN UPDATED – REFRESH FOR THE NEW UPDATE</h1>";
+}
+
+let myName = localStorage.getItem("currentUser_clean");
+
+function showCaptcha() {
+  let div = document.createElement("div");
+  div.id = "captcha";
+  div.innerHTML = "<p>Click the GREEN button</p>";
+  let colors = ["red","blue","yellow","green"];
+  colors.sort(() => Math.random() - 0.5);
+  colors.forEach(c => {
+    let b = document.createElement("button");
+    b.className = "cap-btn";
+    b.style.background = c;
+    b.onclick = () => {
+      if (c === "green") {
+        div.remove();
+        login();
+      } else {
+        alert("Wrong button. Try again.");
+        showCaptcha();
+      }
+    };
+    div.appendChild(b);
+  });
+  document.body.appendChild(div);
+}
+
+function login() {
+  let name = prompt("Username:");
+  if (!name) return;
+  let pass = prompt("Password (leave blank for new account):");
+  if (accounts[name] && accounts[name].pass !== pass) {
+    alert("Wrong password");
+    return login();
+  }
+  if (!accounts[name]) {
+    accounts[name] = {pass: pass || "", verified: false};
+    localStorage.setItem("accounts_clean", JSON.stringify(accounts));
+    alert("New unverified account created");
+  }
+  myName = name;
+  if (!loggedUsers[myName]) loggedUsers[myName] = {start: Date.now(), last: Date.now()};
+  loggedUsers[myName].last = Date.now();
+  localStorage.setItem("loggedUsers_clean", JSON.stringify(loggedUsers));
+  localStorage.setItem("currentUser_clean", myName);
+  location.reload();
+}
+
+if (!myName) {
+  showCaptcha();
+} else {
+  if (myName === "GTAtacotruck") roles[myName] = "owner";
+  renderBoard("thug");
+}
+
+function logout() {
+  localStorage.removeItem("currentUser_clean");
+  location.reload();
+}
+
+function getTimeRole() {
+  if (!myName || !loggedUsers[myName]) return "";
+  let mins = Math.floor((Date.now() - loggedUsers[myName].start) / 60000);
+  if (mins < 250) return "nuthug ★";
+  if (mins < 350) return "midthug ♦";
+  return "oldthug ♠";
+}
+
+function renderBoard(board) {
+  currentBoard = board;
+  let html = `<h2>/${board}/</h2>
+    <p>You are: ${myName} ${accounts[myName]?.verified ? "(verified)" : "(unverified)"} <button onclick="logout()">Logout</button></p>
+    <form id="newthread">
+      Name: <input id="name" value="${myName}" readonly><br>
+      Comment: <textarea id="comment"></textarea><br>
+      File: <input type="file" id="file"><br>
+      <button type="button" onclick="createThread()">Post</button>
+    </form><div id="threads"></div>`;
+  document.getElementById("content").innerHTML = html;
+  (posts[board] || []).forEach(renderThread);
+  updateUsers();
+}
+
+function createThread() {
+  let comment = document.getElementById("comment").value.trim();
+  if (!comment) return;
+  let file = document.getElementById("file").files[0];
+  let fileUrl = file ? URL.createObjectURL(file) : "";
+  let thread = {id:Date.now(), op:{name:myName, comment, fileUrl, time:Date.now(), verified:accounts[myName]?.verified}, replies:[]};
+  if (!posts[currentBoard]) posts[currentBoard] = [];
+  posts[currentBoard].unshift(thread);
+  localStorage.setItem("posts_clean", JSON.stringify(posts));
+  renderBoard(currentBoard);
+}
+
+function renderThread(thread) {
+  let div = document.createElement("div");
+  div.className = "thread";
+  div.innerHTML = renderPost(thread.op, thread.id, true);
+  thread.replies.forEach(r => div.innerHTML += renderPost(r, thread.id));
+  div.innerHTML += `<form><input value="${myName}" readonly id="rname${thread.id}">
+    <textarea id="rcomment${thread.id}"></textarea>
+    <button type="button" onclick="reply(${thread.id})">Post</button></form>`;
+  document.getElementById("threads").appendChild(div);
+}
+
+function renderPost(post, threadId, isOP = false) {
+  let role = roles[post.name] || "";
+  let verified = post.verified ? "(verified)" : "(unverified)";
+  let color = role === "owner" ? "owner" : (role === "admin" || role === "mod") ? "admin" : "";
+  return `<div class="post ${isOP ? 'op' : ''}">
+    <span class="name ${color}">${post.name} ${role ? '['+role+']' : ''} ${verified} ${getTimeRole()}</span>
+    <span>${new Date(post.time).toLocaleString()}</span>
+    ${post.fileUrl ? `<img src="${post.fileUrl}" style="max-width:300px"><br>` : ''}
+    <p>${post.comment.replace(/\n/g,'<br>')}</p>
+    <span class="report" onclick="reportPost(${threadId},${post.time})">Report</span>
+    ${(roles[myName] && ["owner","admin","mod"].includes(roles[myName])) ? `<span class="delete" onclick="deletePost('${currentBoard}',${threadId},${post.time})">Delete</span>` : ''}
+  </div>`;
+}
+
+function reply(threadId) {
+  let comment = document.getElementById("rcomment" + threadId).value.trim();
+  if (!comment) return;
+  let reply = {name:myName, comment, time:Date.now(), verified:accounts[myName]?.verified};
+  let thread = posts[currentBoard].find(t => t.id === threadId);
+  if (thread) {
+    thread.replies.push(reply);
+    localStorage.setItem("posts_clean", JSON.stringify(posts));
+    renderBoard(currentBoard);
+  }
+}
+
+function reportPost(threadId, postTime) {
+  reports.push({board:currentBoard, threadId, postTime, reporter:myName});
+  localStorage.setItem("reports_clean", JSON.stringify(reports));
+  alert("Reported");
+  showReports();
+}
+
+function deletePost(board, threadId, postTime) {
+  let boardPosts = posts[board] || [];
+  let thread = boardPosts.find(t => t.id === threadId);
+  if (!thread) return;
+  let deleted = false;
+  if (postTime === thread.op.time) {
+    posts[board] = boardPosts.filter(t => t.id !== threadId);
+    deleted = true;
+  } else {
+    thread.replies = thread.replies.filter(r => r.time !== postTime);
+    deleted = true;
+  }
+  if (deleted) {
+    audit.push(`${myName} deleted post ${postTime} on /${board}/ at ${new Date().toLocaleString()}`);
+    localStorage.setItem("audit_clean", JSON.stringify(audit));
+    localStorage.setItem("posts_clean", JSON.stringify(posts));
+    renderBoard(board);
+    showAudit();
+  }
+}
+
+function showReports() {
+  if (!["owner","admin","mod"].includes(roles[myName])) return;
+  let panel = document.getElementById("mod-panel");
+  panel.style.display = "block";
+  panel.innerHTML = `<h2>Jannie/Admin Panel</h2>
+    <div>Logged in users: <span id="users-list"></span></div>
+    <div id="reportlist"></div>`;
+  updateUsers();
+  reports.forEach(r => {
+    document.getElementById("reportlist").innerHTML += `<p>Report by ${r.reporter} on /${r.board}/ ${r.threadId} ${r.postTime}
+      <button onclick="deletePost('${r.board}',${r.threadId},${r.postTime})">Delete</button></p>`;
+  });
+}
+
+function showAudit() {
+  if (roles[myName] !== "owner") return;
+  let log = document.getElementById("audit-log");
+  log.innerHTML = "<strong>Audit Log</strong><br>" + audit.slice(-50).join("<br>");
+}
+
+function updateUsers() {
+  let list = document.getElementById("users-list");
+  if (list) list.innerText = Object.keys(loggedUsers).join(", ");
+}
+
+// Owner controls
+function siteDown() {
+  if (roles[myName] === "owner") {
+    let mins = prompt("How many minutes?");
+    if (mins) {
+      siteStatus = {mode:"down", until:Date.now() + mins*60000};
+      localStorage.setItem("siteStatus_clean", JSON.stringify(siteStatus));
+      location.reload();
+    }
+  }
+}
+function updateMode() {
+  if (roles[myName] === "owner") {
+    siteStatus = {mode:"update"};
+    localStorage.setItem("siteStatus_clean", JSON.stringify(siteStatus));
+    location.reload();
+  }
+}
+function normalMode() {
+  if (roles[myName] === "owner") {
+    siteStatus = {mode:"normal"};
+    localStorage.setItem("siteStatus_clean", JSON.stringify(siteStatus));
+    location.reload();
+  }
+}
+function clearAllPosts() {
+  if (roles[myName] === "owner" && confirm("Wipe ALL posts?")) {
+    posts = {};
+    localStorage.setItem("posts_clean", "{}");
+    renderBoard(currentBoard);
+  }
+}
+function grantRole() {
+  if (roles[myName] === "owner") {
+    let name = prompt("Username:");
+    let role = prompt("Role (mod/admin):");
+    if (name && role && role !== "owner") {
+      roles[name] = role;
+      localStorage.setItem("roles_clean", JSON.stringify(roles));
+    }
+  }
+}
+
+// Panels
+if (roles[myName] === "owner") {
+  document.getElementById("owner-panel").style.display = "block";
+  showAudit();
+}
+if (["owner","admin","mod"].includes(roles[myName])) {
+  document.getElementById("mod-panel").style.display = "block";
+  showReports();
+  setInterval(updateUsers, 8000);
+}
+
+// Cleanup unverified posts >5h
+setInterval(() => {
+  let now = Date.now();
+  for (let board in posts) {
+    posts[board] = posts[board].filter(t => {
+      if (!t.op.verified && now - t.op.time > 5*60*60*1000) return false;
+      t.replies = t.replies.filter(r => r.verified || now - r.time < 5*60*60*1000);
+      return true;
+    });
+  }
+  localStorage.setItem("posts_clean", JSON.stringify(posts));
+}, 600000);
+
+// Board click
+document.querySelectorAll(".board").forEach(b => b.onclick = () => renderBoard(b.dataset.board));
+if (myName) renderBoard("thug");
+</script>
+</body>
+</html>
