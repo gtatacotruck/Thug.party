@@ -7,8 +7,8 @@
   /* Base Body Styles */
   body {margin:0;background:#111;color:#ccc;font-family:Verdana,sans-serif;}
   
-  /* Standard Content Visibility (Hidden by default to be controlled by JS) */
-  .app-content { visibility: hidden; }
+  /* Standard Content Visibility (Initially hidden to prevent flash of unstyled content, controlled by JS) */
+  .app-content { visibility: hidden; display: none; }
 
   header {background:#222;padding:15px;text-align:center;border-bottom:3px solid #f00;}
   h1 {margin:0;color:#f00;font-size:2.2em;text-shadow:0 0 10px #f00;}
@@ -55,12 +55,12 @@
   input, textarea {width:100%;background:#333;color:#fff;border:1px solid #555;padding:8px;margin:8px 0;border-radius:4px; box-sizing: border-box;}
   button {background:#f00;color:#fff;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:bold;}
   button:hover {background:#ff3333;}
-  #owner-panel, #mod-panel {background:#300;padding:20px;margin:20px 0;border:2px solid #f00;border-radius:8px;display:none;}
+  #owner-panel, #mod-panel {background:#300;padding:20px;margin:20px 0;border:2px solid #f00;border-radius:8px;}
   #audit-log {background:#200;padding:15px;margin:10px 0;border:1px solid #f00;border-radius:6px;max-height:300px;overflow-y:auto;}
   .report {color:#f88;cursor:pointer;font-size:0.9em;}
   .delete, .shake {color:#f00;cursor:pointer;margin-left:15px;}
   .shake {color: orange;} 
-  #raid-alert {background:#800;padding:20px;margin:20px 0;border:3px solid #f00;text-align:center;font-size:1.5em;color:#ff0;display:none;}
+  #raid-alert {background:#800;padding:20px;margin:20px 0;border:3px solid #f00;text-align:center;font-size:1.5em;color:#ff0;}
   #captcha {background:#222;padding:20px;border-radius:8px;text-align:center;margin:20px 0;}
   .cap-btn {width:80px;height:80px;margin:10px;border-radius:12px;cursor:pointer;}
   
@@ -85,49 +85,6 @@
 </style>
 </head>
 <body>
-
-<script>
-    // Note: This script uses a basic fetch to reset the Firebase status outside of the module scope.
-    // It is temporary and should be removed after the first load to prevent data loss.
-    // You MUST ensure the firebaseConfig details are correct below for the reset to work.
-    
-    const hardReset = async () => {
-        // 1. Wipe local storage (clears user, accounts, roles, audit logs, etc.)
-        const keysToClear = ["currentUser_clean", "reports_clean", "roles_clean", "accounts_clean", "audit_clean", "loggedUsers_clean", "siteStatus_clean"];
-        keysToClear.forEach(key => localStorage.removeItem(key));
-
-        // 2. Reset Firebase siteStatus to 'normal' (requires direct database access)
-        const databaseURL = "https://thugparty1-default-rtdb.firebaseio.com"; 
-        const statusPath = "siteStatus_clean.json";
-        const newStatus = {mode: "normal", until: 0};
-        
-        try {
-             // We use a PUT request to the Firebase REST API to force the status change
-            const response = await fetch(`${databaseURL}/${statusPath}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newStatus)
-            });
-
-            if (response.ok) {
-                console.log("Hard reset successful. Site status set to 'normal'.");
-            } else {
-                console.error("Firebase reset failed:", response.status, await response.text());
-            }
-        } catch (error) {
-            console.error("Network error during Firebase reset:", error);
-        }
-
-        // 3. Force a reload with the clean slate
-        window.location.reload();
-    };
-
-    // Only run if a specific local indicator is present or if we suspect an issue.
-    // For this fix, we'll run it once automatically.
-    // **IMPORTANT: Comment out or remove the line below after confirming the fix.**
-    // hardReset(); // <--- REMOVE THIS LINE AFTER THE FIRST SUCCESSFUL LOAD
-</script>
-
 
 <div id="status-overlay"></div>
 
@@ -203,54 +160,49 @@ function setAppVisibility(visible) {
 
 function handleSiteStatus(status) {
     const overlay = document.getElementById('status-overlay');
-    
-    // 1. Check for Site Down
-    if (status.mode === "down" && status.until > Date.now()) {
+    const isDown = status.mode === "down" && status.until > Date.now();
+    const isUpdate = status.mode === "update";
+
+    // 1. If Down or Update, show overlay and hide app content
+    if (isDown || isUpdate) {
         setAppVisibility(false);
         overlay.style.display = 'block';
-        overlay.innerHTML = "<h2 style='color:#f00;'>sorry my thugs the site is down for now!</h2>";
+
+        if (isDown) {
+            overlay.innerHTML = "<h2 style='color:#f00;'>sorry my thugs the site is down for now!</h2>";
+        } else if (isUpdate) {
+            overlay.innerHTML = "<h2 style='color:#ff0;'>SITE HAS BEEN UPDATED – REFRESH FOR THE NEW UPDATE</h2>";
+        }
         return;
     }
     
-    // 2. Check for Site Update (Requires refresh)
-    if (status.mode === "update") {
-        setAppVisibility(false);
-        overlay.style.display = 'block';
-        overlay.innerHTML = "<h2 style='color:#ff0;'>SITE HAS BEEN UPDATED – REFRESH FOR THE NEW UPDATE</h2>";
-        return;
-    }
-    
-    // 3. Normal Mode: Hide overlay and initialize site content
+    // 2. Normal Mode: Hide overlay and initialize site content
     if (status.mode === "normal") {
         overlay.style.display = 'none';
-        setAppVisibility(true);
+        setAppVisibility(true); // Make all app content visible
 
         if (!myName) {
           showCaptcha();
         } else {
           if (myName === "GTAtacotruck") roles[myName] = "owner";
           
+          // Only render the board if it hasn't been loaded yet
           if (document.getElementById("threads") === null || document.getElementById("content").innerHTML === "") {
               renderBoard("thug");
           }
         }
         
-        // Panel initialization and recurring tasks
-        if (roles[myName] === "owner") {
-          document.getElementById("owner-panel").style.display = "block";
-          showAudit();
-        } else if (document.getElementById("owner-panel")) {
-             document.getElementById("owner-panel").style.display = "none";
-        }
-        
-        if (["owner","admin","mod"].includes(roles[myName])) {
-          document.getElementById("mod-panel").style.display = "block";
-          showReports();
-          if (!window.userUpdateInterval) { 
+        // Panel visibility based on role (must check if element exists)
+        const ownerPanel = document.getElementById("owner-panel");
+        const modPanel = document.getElementById("mod-panel");
+
+        if (ownerPanel) ownerPanel.style.display = (roles[myName] === "owner") ? "block" : "none";
+        if (ownerPanel && roles[myName] === "owner") showAudit();
+
+        if (modPanel) modPanel.style.display = (["owner","admin","mod"].includes(roles[myName])) ? "block" : "none";
+        if (modPanel && ["owner","admin","mod"].includes(roles[myName]) && !window.userUpdateInterval) {
+            showReports();
             window.userUpdateInterval = setInterval(updateUsers, 8000);
-          }
-        } else if (document.getElementById("mod-panel")) {
-            document.getElementById("mod-panel").style.display = "none";
         }
 
         // Initialize board nav listeners (only once)
@@ -266,7 +218,7 @@ function handleSiteStatus(status) {
 // Global listener for site status updates
 const statusRef = dbRef(db, 'siteStatus_clean');
 onValue(statusRef, (snapshot) => {
-    const status = snapshot.val() || {mode: "normal"}; 
+    const status = snapshot.val() || {mode: "normal", until: 0}; 
     handleSiteStatus(status);
 });
 
