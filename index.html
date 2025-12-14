@@ -4,7 +4,12 @@
 <meta charset="UTF-8">
 <title>Thug.party</title>
 <style>
+  /* Base Body Styles */
   body {margin:0;background:#111;color:#ccc;font-family:Verdana,sans-serif;}
+  
+  /* Standard Content Visibility (Hidden by default to be controlled by JS) */
+  .app-content { visibility: hidden; }
+
   header {background:#222;padding:15px;text-align:center;border-bottom:3px solid #f00;}
   h1 {margin:0;color:#f00;font-size:2.2em;text-shadow:0 0 10px #f00;}
   nav {background:#1a1a1a;padding:10px;overflow-x:auto;white-space: nowrap;}
@@ -16,7 +21,7 @@
 
   /* Thread/Post Styling for new features */
   .thread {background:#1e1e1e;margin:20px 0;padding:15px;border:1px solid #444;border-radius:6px; position: relative;}
-  .thread.pinned {border: 2px solid #f00; box-shadow: 0 0 5px rgba(255,0,0,0.5);} /* Pinned style */
+  .thread.pinned {border: 2px solid #f00; box-shadow: 0 0 5px rgba(255,0,0,0.5);} 
   .post {margin:10px 0;padding:12px;background:#262626;border-left:4px solid #777;border-radius:4px;}
   .op {border-left:8px solid #f00;}
 
@@ -24,14 +29,14 @@
   .name {font-weight:bold;}
   .owner {color:#f00;font-weight:bold;}
   .admin {color:#0ff;}
-  .mod {color:#ff0;} /* Used Jannie class as mod for consistency */
-  .coal {color: #555; font-style: italic;} /* NOTORIOUS COALPOSTER */
+  .mod {color:#ff0;} 
+  .coal {color: #555; font-style: italic;} 
   .verified {color:#0f0;}
   .time-role {font-size:0.85em;color:#888;}
-  .clickable-name {cursor: pointer;} /* Make names clickable for staff */
+  .clickable-name {cursor: pointer;} 
 
   /* Text Formatting */
-  .greentext {color: #789922;} /* Standard 4chan greentext color */
+  .greentext {color: #789922;} 
   .colored-text {display: block; margin-top: 5px; margin-bottom: 5px;}
   
   /* Tombstone/Shaken Post Style */
@@ -54,12 +59,12 @@
   #audit-log {background:#200;padding:15px;margin:10px 0;border:1px solid #f00;border-radius:6px;max-height:300px;overflow-y:auto;}
   .report {color:#f88;cursor:pointer;font-size:0.9em;}
   .delete, .shake {color:#f00;cursor:pointer;margin-left:15px;}
-  .shake {color: orange;} /* New shake button color */
+  .shake {color: orange;} 
   #raid-alert {background:#800;padding:20px;margin:20px 0;border:3px solid #f00;text-align:center;font-size:1.5em;color:#ff0;display:none;}
   #captcha {background:#222;padding:20px;border-radius:8px;text-align:center;margin:20px 0;}
   .cap-btn {width:80px;height:80px;margin:10px;border-radius:12px;cursor:pointer;}
   
-  /* FIX: Status Overlay Styling */
+  /* Status Overlay Styling */
   #status-overlay {
       position: fixed;
       top: 0;
@@ -68,7 +73,7 @@
       height: 100%;
       background: rgba(0, 0, 0, 0.95);
       z-index: 1000;
-      display: none; /* Hidden by default */
+      display: none; 
       text-align: center;
       padding-top: 40vh;
   }
@@ -80,10 +85,54 @@
 </style>
 </head>
 <body>
+
+<script>
+    // Note: This script uses a basic fetch to reset the Firebase status outside of the module scope.
+    // It is temporary and should be removed after the first load to prevent data loss.
+    // You MUST ensure the firebaseConfig details are correct below for the reset to work.
+    
+    const hardReset = async () => {
+        // 1. Wipe local storage (clears user, accounts, roles, audit logs, etc.)
+        const keysToClear = ["currentUser_clean", "reports_clean", "roles_clean", "accounts_clean", "audit_clean", "loggedUsers_clean", "siteStatus_clean"];
+        keysToClear.forEach(key => localStorage.removeItem(key));
+
+        // 2. Reset Firebase siteStatus to 'normal' (requires direct database access)
+        const databaseURL = "https://thugparty1-default-rtdb.firebaseio.com"; 
+        const statusPath = "siteStatus_clean.json";
+        const newStatus = {mode: "normal", until: 0};
+        
+        try {
+             // We use a PUT request to the Firebase REST API to force the status change
+            const response = await fetch(`${databaseURL}/${statusPath}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newStatus)
+            });
+
+            if (response.ok) {
+                console.log("Hard reset successful. Site status set to 'normal'.");
+            } else {
+                console.error("Firebase reset failed:", response.status, await response.text());
+            }
+        } catch (error) {
+            console.error("Network error during Firebase reset:", error);
+        }
+
+        // 3. Force a reload with the clean slate
+        window.location.reload();
+    };
+
+    // Only run if a specific local indicator is present or if we suspect an issue.
+    // For this fix, we'll run it once automatically.
+    // **IMPORTANT: Comment out or remove the line below after confirming the fix.**
+    // hardReset(); // <--- REMOVE THIS LINE AFTER THE FIRST SUCCESSFUL LOAD
+</script>
+
+
 <div id="status-overlay"></div>
 
-<header><h1>Thug.party</h1></header>
-<nav>
+<header class="app-content"><h1>Thug.party</h1></header>
+<nav class="app-content">
   <div class="board" data-board="rules"><strong>/rules/</strong><div class="desc">The Law</div></div> 
   <div class="board" data-board="qa"><strong>/qa/</strong><div class="desc">Questions & Answers</div></div>
   <div class="board" data-board="thug"><strong>/thug/</strong><div class="desc">General thug discussion</div></div>
@@ -93,11 +142,11 @@
   <div class="board" data-board="spam"><strong>/spam/</strong><div class="desc">Spam and flood zone</div></div>
 </nav>
 
-<div id="raid-alert">RAID INCOMING – TOO MANY NEW USERS<br><button onclick="dismissRaid()">Not a raid</button></div>
+<div id="raid-alert" class="app-content">RAID INCOMING – TOO MANY NEW USERS<br><button onclick="dismissRaid()">Not a raid</button></div>
 
-<div id="content"></div>
+<div id="content" class="app-content"></div>
 
-<div id="owner-panel">
+<div id="owner-panel" class="app-content">
   <h2>Owner Panel (GTAtacotruck)</h2>
   <button onclick="siteDown()">Site Down (minutes)</button>
   <button onclick="updateMode()">SITE UPDATED – REFRESH</button>
@@ -107,7 +156,7 @@
   <div id="audit-log"><strong>Audit Log</strong><br></div>
 </div>
 
-<div id="mod-panel">
+<div id="mod-panel" class="app-content">
   <h2>Jannie/Admin Panel</h2>
   <div>Logged in users: <span id="users-list"></span></div>
   <div id="reports"></div>
@@ -144,17 +193,20 @@ let loggedUsers = JSON.parse(localStorage.getItem("loggedUsers_clean") || "{}");
 
 // --- REVISED SITE STATUS LOGIC ---
 
-// Function to handle the global site status checks
+// Helper to control visibility of the entire application content
+function setAppVisibility(visible) {
+    document.querySelectorAll('.app-content').forEach(el => {
+        el.style.visibility = visible ? 'visible' : 'hidden';
+        el.style.display = visible ? '' : 'none';
+    });
+}
+
 function handleSiteStatus(status) {
     const overlay = document.getElementById('status-overlay');
     
-    // Hide all normal content elements (header, nav, raid alert, content, panels)
-    document.querySelectorAll('header, nav, #raid-alert, #content, #owner-panel, #mod-panel').forEach(el => {
-        el.style.display = 'none';
-    });
-
     // 1. Check for Site Down
     if (status.mode === "down" && status.until > Date.now()) {
+        setAppVisibility(false);
         overlay.style.display = 'block';
         overlay.innerHTML = "<h2 style='color:#f00;'>sorry my thugs the site is down for now!</h2>";
         return;
@@ -162,6 +214,7 @@ function handleSiteStatus(status) {
     
     // 2. Check for Site Update (Requires refresh)
     if (status.mode === "update") {
+        setAppVisibility(false);
         overlay.style.display = 'block';
         overlay.innerHTML = "<h2 style='color:#ff0;'>SITE HAS BEEN UPDATED – REFRESH FOR THE NEW UPDATE</h2>";
         return;
@@ -170,34 +223,34 @@ function handleSiteStatus(status) {
     // 3. Normal Mode: Hide overlay and initialize site content
     if (status.mode === "normal") {
         overlay.style.display = 'none';
-        
-        // Show normal content elements
-        document.querySelectorAll('header, nav, #content').forEach(el => {
-            el.style.display = '';
-        });
+        setAppVisibility(true);
 
         if (!myName) {
           showCaptcha();
         } else {
           if (myName === "GTAtacotruck") roles[myName] = "owner";
           
-          // Only render the board if it hasn't been loaded yet (or if explicitly triggered)
-          if (document.getElementById("threads") === null) {
+          if (document.getElementById("threads") === null || document.getElementById("content").innerHTML === "") {
               renderBoard("thug");
           }
         }
         
-        // Initialize panels (must check existence as they might be missing in a pure HTML load)
-        if (roles[myName] === "owner" && document.getElementById("owner-panel")) {
+        // Panel initialization and recurring tasks
+        if (roles[myName] === "owner") {
           document.getElementById("owner-panel").style.display = "block";
           showAudit();
+        } else if (document.getElementById("owner-panel")) {
+             document.getElementById("owner-panel").style.display = "none";
         }
-        if (["owner","admin","mod"].includes(roles[myName]) && document.getElementById("mod-panel")) {
+        
+        if (["owner","admin","mod"].includes(roles[myName])) {
           document.getElementById("mod-panel").style.display = "block";
           showReports();
-          if (!window.userUpdateInterval) { // Prevent multiple intervals
+          if (!window.userUpdateInterval) { 
             window.userUpdateInterval = setInterval(updateUsers, 8000);
           }
+        } else if (document.getElementById("mod-panel")) {
+            document.getElementById("mod-panel").style.display = "none";
         }
 
         // Initialize board nav listeners (only once)
@@ -213,7 +266,7 @@ function handleSiteStatus(status) {
 // Global listener for site status updates
 const statusRef = dbRef(db, 'siteStatus_clean');
 onValue(statusRef, (snapshot) => {
-    const status = snapshot.val() || {mode: "normal"}; // Default to normal if not set
+    const status = snapshot.val() || {mode: "normal"}; 
     handleSiteStatus(status);
 });
 
@@ -240,7 +293,6 @@ function showCaptcha() {
     };
     div.appendChild(b);
   });
-  // FIX: Append captcha to content, not body
   document.getElementById("content").appendChild(div); 
 }
 
@@ -319,13 +371,11 @@ function loadPosts(board) {
     if (data) {
       for (let key in data) {
         let t = data[key];
-        // Filter expired posts from Coalposters
         if (t.expiresAt && Date.now() > t.expiresAt) continue; 
         threads.push({...t, id: key});
       }
     }
     
-    // Sorting: Pinned threads first, then by time
     threads.sort((a, b) => {
         let aPinned = a.pinnedUntil && a.pinnedUntil > Date.now();
         let bPinned = b.pinnedUntil && b.pinnedUntil > Date.now();
@@ -402,7 +452,6 @@ function renderThread(thread) {
 function formatComment(post) {
     let comment = post.comment || "";
     
-    // Check for Tombstoning
     if (post.tombstoned) {
         return `<span class="tombstone-text">is user posted illegal material laugh at this loser</span>`;
     }
@@ -443,7 +492,6 @@ function renderPost(post, threadId, isOP = false, replyId = null) {
   
   let isStaff = ["owner","admin","mod"].includes(roles[myName]);
   
-  // Make the name clickable for verification toggle if the current user is staff
   let nameSpan = `<span class="name ${roleClass} ${isStaff ? 'clickable-name' : ''}" 
                       onclick="${isStaff ? `toggleVerification('${post.name}')` : ''}">
                       ${post.name}${roleDisplay} ${verified} ${getTimeRole()}
@@ -501,7 +549,7 @@ function reply(threadId) {
 
 function togglePin(tId, currentlyPinned) {
     if (!["owner","admin","mod"].includes(roles[myName])) return;
-    const pinUntil = currentlyPinned ? 0 : Date.now() + (24 * 60 * 60 * 1000); // 24 hours
+    const pinUntil = currentlyPinned ? 0 : Date.now() + (24 * 60 * 60 * 1000); 
     set(dbRef(db, `posts/${currentBoard}/${tId}/pinnedUntil`), pinUntil);
 }
 
@@ -518,7 +566,7 @@ function toggleVerification(targetName) {
         audit.push(`${myName} ${newStatus ? 'VERIFIED' : 'UNVERIFIED'} user ${targetName}`);
         localStorage.setItem("audit_clean", JSON.stringify(audit));
         showAudit();
-        renderBoard(currentBoard); // Rerender board to update status visually
+        renderBoard(currentBoard); 
     }
 }
 
@@ -558,7 +606,6 @@ function tombstonePost(board, threadId, postTime) {
     }, { once: true });
 }
 
-
 async function vote(tId, pId, type) {
     let path = `posts/${currentBoard}/${tId}` + (pId === 'op' ? '/op' : `/replies/${pId}`);
     const postRef = dbRef(db, path);
@@ -574,7 +621,6 @@ async function vote(tId, pId, type) {
             post.score = (post.score || 0) - currentVote + newVote;
             post.voters[myName] = newVote;
 
-            // Handle Role Transitions
             if (post.score <= -100 && roles[post.name] !== "owner") {
                 updateUserRole(post.name, "coal");
             }
