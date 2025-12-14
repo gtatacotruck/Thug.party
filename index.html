@@ -58,9 +58,30 @@
   #raid-alert {background:#800;padding:20px;margin:20px 0;border:3px solid #f00;text-align:center;font-size:1.5em;color:#ff0;display:none;}
   #captcha {background:#222;padding:20px;border-radius:8px;text-align:center;margin:20px 0;}
   .cap-btn {width:80px;height:80px;margin:10px;border-radius:12px;cursor:pointer;}
+  
+  /* FIX: Status Overlay Styling */
+  #status-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.95);
+      z-index: 1000;
+      display: none; /* Hidden by default */
+      text-align: center;
+      padding-top: 40vh;
+  }
+  #status-overlay h2 {
+      color: #f00;
+      font-size: 2.5em;
+      text-shadow: 0 0 10px #f00;
+  }
 </style>
 </head>
 <body>
+<div id="status-overlay"></div>
+
 <header><h1>Thug.party</h1></header>
 <nav>
   <div class="board" data-board="rules"><strong>/rules/</strong><div class="desc">The Law</div></div> 
@@ -121,45 +142,71 @@ let accounts = JSON.parse(localStorage.getItem("accounts_clean") || '{"GTAtacotr
 let audit = JSON.parse(localStorage.getItem("audit_clean") || "[]");
 let loggedUsers = JSON.parse(localStorage.getItem("loggedUsers_clean") || "{}");
 
+// --- REVISED SITE STATUS LOGIC ---
+
 // Function to handle the global site status checks
 function handleSiteStatus(status) {
+    const overlay = document.getElementById('status-overlay');
+    
+    // Hide all normal content elements (header, nav, raid alert, content, panels)
+    document.querySelectorAll('header, nav, #raid-alert, #content, #owner-panel, #mod-panel').forEach(el => {
+        el.style.display = 'none';
+    });
+
     // 1. Check for Site Down
     if (status.mode === "down" && status.until > Date.now()) {
-        document.body.innerHTML = "<h1 style='color:#f00;text-align:center;margin-top:40vh'>sorry my thugs the site is down for now!</h1>";
-        return true; // Status handled, block normal loading
+        overlay.style.display = 'block';
+        overlay.innerHTML = "<h2 style='color:#f00;'>sorry my thugs the site is down for now!</h2>";
+        return;
     }
     
     // 2. Check for Site Update (Requires refresh)
     if (status.mode === "update") {
-        document.body.innerHTML = "<h1 style='color:#ff0;text-align:center;margin-top:40vh'>SITE HAS BEEN UPDATED – REFRESH FOR THE NEW UPDATE</h1>";
-        return true; // Status handled, block normal loading
+        overlay.style.display = 'block';
+        overlay.innerHTML = "<h2 style='color:#ff0;'>SITE HAS BEEN UPDATED – REFRESH FOR THE NEW UPDATE</h2>";
+        return;
     }
     
-    // 3. Normal Mode, ensure content is loaded
+    // 3. Normal Mode: Hide overlay and initialize site content
     if (status.mode === "normal") {
+        overlay.style.display = 'none';
+        
+        // Show normal content elements
+        document.querySelectorAll('header, nav, #content').forEach(el => {
+            el.style.display = '';
+        });
+
         if (!myName) {
           showCaptcha();
         } else {
           if (myName === "GTAtacotruck") roles[myName] = "owner";
-          renderBoard("thug");
+          
+          // Only render the board if it hasn't been loaded yet (or if explicitly triggered)
+          if (document.getElementById("threads") === null) {
+              renderBoard("thug");
+          }
         }
         
-        // Initialize panels after status check
-        if (roles[myName] === "owner") {
+        // Initialize panels (must check existence as they might be missing in a pure HTML load)
+        if (roles[myName] === "owner" && document.getElementById("owner-panel")) {
           document.getElementById("owner-panel").style.display = "block";
           showAudit();
         }
-        if (["owner","admin","mod"].includes(roles[myName])) {
+        if (["owner","admin","mod"].includes(roles[myName]) && document.getElementById("mod-panel")) {
           document.getElementById("mod-panel").style.display = "block";
           showReports();
-          setInterval(updateUsers, 8000);
+          if (!window.userUpdateInterval) { // Prevent multiple intervals
+            window.userUpdateInterval = setInterval(updateUsers, 8000);
+          }
         }
 
-        // Initialize board nav listeners
-        document.querySelectorAll(".board").forEach(b =>
-          b.onclick = () => renderBoard(b.dataset.board)
-        );
-        return false;
+        // Initialize board nav listeners (only once)
+        if (!window.boardNavInitialized) {
+            document.querySelectorAll(".board").forEach(b =>
+                b.onclick = () => renderBoard(b.dataset.board)
+            );
+            window.boardNavInitialized = true;
+        }
     }
 }
 
@@ -169,6 +216,8 @@ onValue(statusRef, (snapshot) => {
     const status = snapshot.val() || {mode: "normal"}; // Default to normal if not set
     handleSiteStatus(status);
 });
+
+// --- END REVISED SITE STATUS LOGIC ---
 
 function showCaptcha() {
   let div = document.createElement("div");
@@ -191,7 +240,8 @@ function showCaptcha() {
     };
     div.appendChild(b);
   });
-  document.body.appendChild(div);
+  // FIX: Append captcha to content, not body
+  document.getElementById("content").appendChild(div); 
 }
 
 function login() {
@@ -314,7 +364,7 @@ async function createThread() {
   let expiry = roles[myName] === "coal" ? Date.now() + (4 * 60 * 60 * 1000) : null;
 
   let thread = {
-      op:{name:myName, comment, fileUrl, time:Date.now(), verified:accounts[myName]?.verified, score: 0, voters: {}, tombstoned: false}, // Added tombstoned flag
+      op:{name:myName, comment, fileUrl, time:Date.now(), verified:accounts[myName]?.verified, score: 0, voters: {}, tombstoned: false},
       replies:[],
       pinnedUntil: 0,
       expiresAt: expiry 
@@ -494,9 +544,9 @@ function tombstonePost(board, threadId, postTime) {
         if (path) {
             runTransaction(dbRef(db, path), (post) => {
                 if (post) {
-                    post.comment = ""; // Clear comment (optional, but good practice)
-                    post.fileUrl = ""; // Remove image
-                    post.tombstoned = true; // Set flag
+                    post.comment = "";
+                    post.fileUrl = "";
+                    post.tombstoned = true;
                 }
                 return post;
             }).then(() => {
@@ -639,8 +689,8 @@ window.createThread = createThread;
 window.reply = reply;
 window.reportPost = reportPost;
 window.deletePost = deletePost;
-window.tombstonePost = tombstonePost; // Exposed new function
-window.toggleVerification = toggleVerification; // Exposed new function
+window.tombstonePost = tombstonePost;
+window.toggleVerification = toggleVerification;
 window.siteDown = siteDown;
 window.updateMode = updateMode;
 window.normalMode = normalMode;
