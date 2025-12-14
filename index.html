@@ -28,10 +28,15 @@
   .coal {color: #555; font-style: italic;} /* NOTORIOUS COALPOSTER */
   .verified {color:#0f0;}
   .time-role {font-size:0.85em;color:#888;}
+  .clickable-name {cursor: pointer;} /* Make names clickable for staff */
 
   /* Text Formatting */
   .greentext {color: #789922;} /* Standard 4chan greentext color */
   .colored-text {display: block; margin-top: 5px; margin-bottom: 5px;}
+  
+  /* Tombstone/Shaken Post Style */
+  .shaken {font-style: italic; color: #555; background: #333; border-left: 4px solid #f80;}
+  .tombstone-text {color: #f80; font-weight: bold;}
   
   /* Voting UI */
   .vote-box {display: inline-flex; align-items: center; margin-right: 15px; background: #111; padding: 2px 8px; border-radius: 4px; float: right; margin-left: 10px;}
@@ -48,7 +53,8 @@
   #owner-panel, #mod-panel {background:#300;padding:20px;margin:20px 0;border:2px solid #f00;border-radius:8px;display:none;}
   #audit-log {background:#200;padding:15px;margin:10px 0;border:1px solid #f00;border-radius:6px;max-height:300px;overflow-y:auto;}
   .report {color:#f88;cursor:pointer;font-size:0.9em;}
-  .delete {color:#f00;cursor:pointer;margin-left:15px;}
+  .delete, .shake {color:#f00;cursor:pointer;margin-left:15px;}
+  .shake {color: orange;} /* New shake button color */
   #raid-alert {background:#800;padding:20px;margin:20px 0;border:3px solid #f00;text-align:center;font-size:1.5em;color:#ff0;display:none;}
   #captcha {background:#222;padding:20px;border-radius:8px;text-align:center;margin:20px 0;}
   .cap-btn {width:80px;height:80px;margin:10px;border-radius:12px;cursor:pointer;}
@@ -57,7 +63,8 @@
 <body>
 <header><h1>Thug.party</h1></header>
 <nav>
-  <div class="board" data-board="rules"><strong>/rules/</strong><div class="desc">The Law</div></div> <div class="board" data-board="qa"><strong>/qa/</strong><div class="desc">Questions & Answers</div></div>
+  <div class="board" data-board="rules"><strong>/rules/</strong><div class="desc">The Law</div></div> 
+  <div class="board" data-board="qa"><strong>/qa/</strong><div class="desc">Questions & Answers</div></div>
   <div class="board" data-board="thug"><strong>/thug/</strong><div class="desc">General thug discussion</div></div>
   <div class="board" data-board="pol"><strong>/pol/</strong><div class="desc">Politically Incorrect</div></div>
   <div class="board" data-board="shit"><strong>/shit/</strong><div class="desc">Shitposting</div></div>
@@ -87,7 +94,8 @@
 
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-import { getDatabase, ref, onValue, push, remove, set, runTransaction } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+import { getDatabase, ref as dbRef, onValue, push, remove, set, runTransaction } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCuje9LHZwow99YpV5LqHtQm2LY3NLOgPM",
@@ -101,6 +109,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
+const storage = getStorage(app);
 
 let myName = localStorage.getItem("currentUser_clean");
 let currentBoard = "thug";
@@ -111,21 +120,55 @@ let roles = JSON.parse(localStorage.getItem("roles_clean") || '{"GTAtacotruck":"
 let accounts = JSON.parse(localStorage.getItem("accounts_clean") || '{"GTAtacotruck":{"pass":"her0in","verified":true}}');
 let audit = JSON.parse(localStorage.getItem("audit_clean") || "[]");
 let loggedUsers = JSON.parse(localStorage.getItem("loggedUsers_clean") || "{}");
-let siteStatus = JSON.parse(localStorage.getItem("siteStatus_clean") || '{"mode":"normal"}');
 
-if (siteStatus.mode === "down" && siteStatus.until > Date.now()) {
-  document.body.innerHTML = "<h1 style='color:#f00;text-align:center;margin-top:40vh'>sorry my thugs the site is down for now!</h1>";
-}
-if (siteStatus.mode === "update") {
-  document.body.innerHTML = "<h1 style='color:#ff0;text-align:center;margin-top:40vh'>SITE HAS BEEN UPDATED – REFRESH FOR THE NEW UPDATE</h1>";
+// Function to handle the global site status checks
+function handleSiteStatus(status) {
+    // 1. Check for Site Down
+    if (status.mode === "down" && status.until > Date.now()) {
+        document.body.innerHTML = "<h1 style='color:#f00;text-align:center;margin-top:40vh'>sorry my thugs the site is down for now!</h1>";
+        return true; // Status handled, block normal loading
+    }
+    
+    // 2. Check for Site Update (Requires refresh)
+    if (status.mode === "update") {
+        document.body.innerHTML = "<h1 style='color:#ff0;text-align:center;margin-top:40vh'>SITE HAS BEEN UPDATED – REFRESH FOR THE NEW UPDATE</h1>";
+        return true; // Status handled, block normal loading
+    }
+    
+    // 3. Normal Mode, ensure content is loaded
+    if (status.mode === "normal") {
+        if (!myName) {
+          showCaptcha();
+        } else {
+          if (myName === "GTAtacotruck") roles[myName] = "owner";
+          renderBoard("thug");
+        }
+        
+        // Initialize panels after status check
+        if (roles[myName] === "owner") {
+          document.getElementById("owner-panel").style.display = "block";
+          showAudit();
+        }
+        if (["owner","admin","mod"].includes(roles[myName])) {
+          document.getElementById("mod-panel").style.display = "block";
+          showReports();
+          setInterval(updateUsers, 8000);
+        }
+
+        // Initialize board nav listeners
+        document.querySelectorAll(".board").forEach(b =>
+          b.onclick = () => renderBoard(b.dataset.board)
+        );
+        return false;
+    }
 }
 
-if (!myName) {
-  showCaptcha();
-} else {
-  if (myName === "GTAtacotruck") roles[myName] = "owner";
-  renderBoard("thug");
-}
+// Global listener for site status updates
+const statusRef = dbRef(db, 'siteStatus_clean');
+onValue(statusRef, (snapshot) => {
+    const status = snapshot.val() || {mode: "normal"}; // Default to normal if not set
+    handleSiteStatus(status);
+});
 
 function showCaptcha() {
   let div = document.createElement("div");
@@ -219,7 +262,7 @@ function renderBoard(board) {
 }
 
 function loadPosts(board) {
-  const postsRef = ref(db, 'posts/' + board);
+  const postsRef = dbRef(db, 'posts/' + board);
   onValue(postsRef, (snapshot) => {
     const data = snapshot.val();
     let threads = [];
@@ -249,21 +292,34 @@ function loadPosts(board) {
   });
 }
 
-function createThread() {
+async function createThread() {
   let comment = document.getElementById("comment").value.trim();
   if (!comment) return;
-  let file = document.getElementById("file").files[0];
-  let fileUrl = file ? URL.createObjectURL(file) : "";
   
+  let file = document.getElementById("file").files[0];
+  let fileUrl = "";
+
+  if (file) {
+      try {
+          const storageReference = storageRef(storage, `${currentBoard}/${Date.now()}_${file.name}`);
+          const snapshot = await uploadBytes(storageReference, file);
+          fileUrl = await getDownloadURL(snapshot.ref);
+      } catch (error) {
+          console.error("Upload failed:", error);
+          alert("Image upload failed. Posting thread without image.");
+          fileUrl = "";
+      }
+  }
+
   let expiry = roles[myName] === "coal" ? Date.now() + (4 * 60 * 60 * 1000) : null;
 
   let thread = {
-      op:{name:myName, comment, fileUrl, time:Date.now(), verified:accounts[myName]?.verified, score: 0, voters: {}},
+      op:{name:myName, comment, fileUrl, time:Date.now(), verified:accounts[myName]?.verified, score: 0, voters: {}, tombstoned: false}, // Added tombstoned flag
       replies:[],
       pinnedUntil: 0,
-      expiresAt: expiry // Coalposter expiry
+      expiresAt: expiry 
   };
-  push(ref(db, 'posts/' + currentBoard), thread);
+  push(dbRef(db, 'posts/' + currentBoard), thread);
   document.getElementById("comment").value = "";
   document.getElementById("file").value = "";
 }
@@ -273,7 +329,6 @@ function renderThread(thread) {
   let div = document.createElement("div");
   div.className = `thread ${isPinned ? 'pinned' : ''}`;
   
-  // Pin button for staff
   let pinButton = "";
   if (["owner","admin","mod"].includes(roles[myName])) {
     pinButton = `<span class="pin-action" onclick="togglePin('${thread.id}', ${isPinned})">${isPinned ? '[Unpin]' : '[Pin 24h]'}</span>`;
@@ -283,7 +338,6 @@ function renderThread(thread) {
   
   if (thread.replies) {
       Object.entries(thread.replies).forEach(([rId, r]) => {
-          // Check for reply expiry as well
           if (r.expiresAt && Date.now() > r.expiresAt) return;
           div.innerHTML += renderPost(r, thread.id, false, rId);
       });
@@ -295,18 +349,23 @@ function renderThread(thread) {
   document.getElementById("threads").appendChild(div);
 }
 
-function formatComment(comment) {
+function formatComment(post) {
+    let comment = post.comment || "";
+    
+    // Check for Tombstoning
+    if (post.tombstoned) {
+        return `<span class="tombstone-text">is user posted illegal material laugh at this loser</span>`;
+    }
+
     let content = comment.replace(/\n/g, '<br>');
     let colorTagMatch = content.match(/^&lt;#([0-9a-fA-F]{6})&gt;/i);
     let hexColor = null;
 
     if (colorTagMatch) {
         hexColor = '#' + colorTagMatch[1];
-        // Remove the color tag from the displayed content
         content = content.substring(colorTagMatch[0].length);
     }
     
-    // Process Greentext
     let lines = content.split('<br>');
     let formattedLines = lines.map(line => {
         if (line.trim().startsWith('>')) {
@@ -317,7 +376,6 @@ function formatComment(comment) {
 
     content = formattedLines.join('<br>');
     
-    // Apply Hex Color if found
     if (hexColor) {
         content = `<span class="colored-text" style="color:${hexColor}">${content}</span>`;
     }
@@ -327,28 +385,47 @@ function formatComment(comment) {
 
 function renderPost(post, threadId, isOP = false, replyId = null) {
   let role = roles[post.name] || "user";
-  let verified = post.verified ? "(verified)" : "(unverified)";
+  let verified = accounts[post.name]?.verified ? "(verified)" : "(unverified)";
   let roleClass = role === "owner" ? "owner" : role === "admin" ? "admin" : role === "mod" ? "mod" : role === "coal" ? "coal" : "";
   let roleDisplay = role === "coal" ? " [NOTORIOUS COALPOSTER]" : role ? ` [${role}]` : "";
   let postId = replyId ? replyId : "op";
   let score = post.score || 0;
   
+  let isStaff = ["owner","admin","mod"].includes(roles[myName]);
+  
+  // Make the name clickable for verification toggle if the current user is staff
+  let nameSpan = `<span class="name ${roleClass} ${isStaff ? 'clickable-name' : ''}" 
+                      onclick="${isStaff ? `toggleVerification('${post.name}')` : ''}">
+                      ${post.name}${roleDisplay} ${verified} ${getTimeRole()}
+                  </span>`;
+
   let voteHtml = `<div class="vote-box">
         <span class="vote-btn up" onclick="vote('${threadId}','${postId}','up')">▲</span>
         <span class="count" style="color:${score >= 0 ? '#0f0' : '#f44'}">${score}</span>
         <span class="vote-btn down" onclick="vote('${threadId}','${postId}','down')">▼</span>
     </div>`;
     
-  let postContent = formatComment(post.comment); // Use the new formatting function
+  let postContent = formatComment(post);
+  let postClass = `post ${isOP ? 'op' : ''} ${post.tombstoned ? 'shaken' : ''}`;
 
-  return `<div class="post ${isOP ? 'op' : ''}">
+  let moderationActions = '';
+  if (isStaff) {
+      moderationActions = `
+          <span class="report" onclick="reportPost('${threadId}',${post.time})">Report</span>
+          <span class="shake" onclick="tombstonePost('${currentBoard}','${threadId}',${post.time})">Shake</span>
+          <span class="delete" onclick="deletePost('${currentBoard}','${threadId}',${post.time})">Delete</span>`;
+  } else {
+      moderationActions = `<span class="report" onclick="reportPost('${threadId}',${post.time})">Report</span>`;
+  }
+
+
+  return `<div class="${postClass}">
     ${voteHtml}
-    <span class="name ${roleClass}">${post.name}${roleDisplay} ${verified} ${getTimeRole()}</span>
+    ${nameSpan}
     <span>${new Date(post.time).toLocaleString()}</span>
-    ${post.fileUrl ? `<img src="${post.fileUrl}" style="max-width:300px"><br>` : ''}
+    ${(post.fileUrl && !post.tombstoned) ? `<img src="${post.fileUrl}" style="max-width:300px"><br>` : ''}
     <p>${postContent}</p>
-    <span class="report" onclick="reportPost('${threadId}',${post.time})">Report</span>
-    ${(roles[myName] && ["owner","admin","mod"].includes(roles[myName]))? `<span class="delete" onclick="deletePost('${currentBoard}','${threadId}',${post.time})">Delete</span>` : ''}
+    ${moderationActions}
   </div>`;
 }
 
@@ -365,21 +442,76 @@ function reply(threadId) {
       verified:accounts[myName]?.verified, 
       score: 0, 
       voters: {}, 
-      expiresAt: expiry
+      expiresAt: expiry,
+      tombstoned: false
   };
-  push(ref(db, 'posts/' + currentBoard + '/' + threadId + '/replies'), reply);
+  push(dbRef(db, 'posts/' + currentBoard + '/' + threadId + '/replies'), reply);
   document.getElementById("rcomment" + threadId).value = "";
 }
 
 function togglePin(tId, currentlyPinned) {
     if (!["owner","admin","mod"].includes(roles[myName])) return;
     const pinUntil = currentlyPinned ? 0 : Date.now() + (24 * 60 * 60 * 1000); // 24 hours
-    set(ref(db, `posts/${currentBoard}/${tId}/pinnedUntil`), pinUntil);
+    set(dbRef(db, `posts/${currentBoard}/${tId}/pinnedUntil`), pinUntil);
 }
+
+function toggleVerification(targetName) {
+    if (!["owner","admin","mod"].includes(roles[myName])) return;
+    if (!accounts[targetName]) return alert("Account not found.");
+
+    const currentStatus = accounts[targetName].verified;
+    const newStatus = !currentStatus;
+    
+    if (confirm(`Toggle verification for ${targetName}? Current: ${currentStatus ? 'Verified' : 'Unverified'}.`)) {
+        accounts[targetName].verified = newStatus;
+        localStorage.setItem("accounts_clean", JSON.stringify(accounts));
+        audit.push(`${myName} ${newStatus ? 'VERIFIED' : 'UNVERIFIED'} user ${targetName}`);
+        localStorage.setItem("audit_clean", JSON.stringify(audit));
+        showAudit();
+        renderBoard(currentBoard); // Rerender board to update status visually
+    }
+}
+
+function tombstonePost(board, threadId, postTime) {
+    if (!["owner","admin","mod"].includes(roles[myName])) return;
+    
+    const postRef = dbRef(db, `posts/${board}/${threadId}`);
+    onValue(postRef, snap => {
+        let data = snap.val();
+        if (!data) return;
+
+        let path = '';
+        if (data.op.time === postTime) {
+            path = `posts/${board}/${threadId}/op`;
+        } else if (data.replies) {
+            let entries = Object.entries(data.replies);
+            let targetEntry = entries.find(([key, val]) => val.time === postTime);
+            if (targetEntry) {
+                path = `posts/${board}/${threadId}/replies/${targetEntry[0]}`;
+            }
+        }
+
+        if (path) {
+            runTransaction(dbRef(db, path), (post) => {
+                if (post) {
+                    post.comment = ""; // Clear comment (optional, but good practice)
+                    post.fileUrl = ""; // Remove image
+                    post.tombstoned = true; // Set flag
+                }
+                return post;
+            }).then(() => {
+                audit.push(`${myName} SHAKED post ${postTime} on /${board}/`);
+                localStorage.setItem("audit_clean", JSON.stringify(audit));
+                showAudit();
+            });
+        }
+    }, { once: true });
+}
+
 
 async function vote(tId, pId, type) {
     let path = `posts/${currentBoard}/${tId}` + (pId === 'op' ? '/op' : `/replies/${pId}`);
-    const postRef = ref(db, path);
+    const postRef = dbRef(db, path);
     
     await runTransaction(postRef, (post) => {
         if (post) {
@@ -418,7 +550,8 @@ function reportPost(threadId, postTime) {
 }
 
 function deletePost(board, threadId, postTime) {
-  const postRef = ref(db, `posts/${board}/${threadId}`);
+  if (!["owner","admin","mod"].includes(roles[myName])) return;
+  const postRef = dbRef(db, `posts/${board}/${threadId}`);
   onValue(postRef, snap => {
     let data = snap.val();
     if (!data) return;
@@ -429,11 +562,11 @@ function deletePost(board, threadId, postTime) {
       let entries = Object.entries(data.replies);
       let targetEntry = entries.find(([key, val]) => val.time === postTime);
       if (targetEntry) {
-          remove(ref(db, `posts/${board}/${threadId}/replies/${targetEntry[0]}`));
+          remove(dbRef(db, `posts/${board}/${threadId}/replies/${targetEntry[0]}`));
       }
     }
 
-    audit.push(`${myName} deleted post ${postTime} on /${board}/`);
+    audit.push(`${myName} DELETED post ${postTime} on /${board}/`);
     localStorage.setItem("audit_clean", JSON.stringify(audit));
     showAudit();
   }, { once: true });
@@ -471,29 +604,24 @@ function siteDown() {
   if (roles[myName] !== "owner") return;
   let mins = prompt("Minutes?");
   if (!mins) return;
-  siteStatus = {mode:"down", until:Date.now() + mins*60000};
-  localStorage.setItem("siteStatus_clean", JSON.stringify(siteStatus));
-  location.reload();
+  const until = Date.now() + mins*60000;
+  set(statusRef, {mode:"down", until: until});
 }
 
 function updateMode() {
   if (roles[myName] !== "owner") return;
-  siteStatus = {mode:"update"};
-  localStorage.setItem("siteStatus_clean", JSON.stringify(siteStatus));
-  location.reload();
+  set(statusRef, {mode:"update", until: 0});
 }
 
 function normalMode() {
   if (roles[myName] !== "owner") return;
-  siteStatus = {mode:"normal"};
-  localStorage.setItem("siteStatus_clean", JSON.stringify(siteStatus));
-  location.reload();
+  set(statusRef, {mode:"normal", until: 0});
 }
 
 function clearAllPosts() {
   if (roles[myName] !== "owner") return;
   if (!confirm("Wipe everything?")) return;
-  boards.forEach(b => remove(ref(db, 'posts/' + b)));
+  boards.forEach(b => remove(dbRef(db, 'posts/' + b)));
 }
 
 function grantRole() {
@@ -511,6 +639,8 @@ window.createThread = createThread;
 window.reply = reply;
 window.reportPost = reportPost;
 window.deletePost = deletePost;
+window.tombstonePost = tombstonePost; // Exposed new function
+window.toggleVerification = toggleVerification; // Exposed new function
 window.siteDown = siteDown;
 window.updateMode = updateMode;
 window.normalMode = normalMode;
@@ -520,23 +650,6 @@ window.dismissRaid = () => { document.getElementById('raid-alert').style.display
 window.vote = vote;
 window.togglePin = togglePin;
 
-/* PANELS */
-
-if (roles[myName] === "owner") {
-  document.getElementById("owner-panel").style.display = "block";
-  showAudit();
-}
-if (["owner","admin","mod"].includes(roles[myName])) {
-  document.getElementById("mod-panel").style.display = "block";
-  showReports();
-  setInterval(updateUsers, 8000);
-}
-
-/* BOARD NAV */
-
-document.querySelectorAll(".board").forEach(b =>
-  b.onclick = () => renderBoard(b.dataset.board)
-);
 </script>
 </body>
 </html>
