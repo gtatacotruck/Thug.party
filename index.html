@@ -7,7 +7,7 @@
   /* Base Body Styles */
   body {margin:0;background:#111;color:#ccc;font-family:Verdana,sans-serif;}
   
-  /* Standard Content Visibility (Initially hidden to prevent flash of unstyled content, controlled by JS) */
+  /* Standard Content Visibility (Initially hidden, controlled by JS in handleSiteStatus) */
   .app-content { visibility: hidden; display: none; }
 
   header {background:#222;padding:15px;text-align:center;border-bottom:3px solid #f00;}
@@ -55,12 +55,12 @@
   input, textarea {width:100%;background:#333;color:#fff;border:1px solid #555;padding:8px;margin:8px 0;border-radius:4px; box-sizing: border-box;}
   button {background:#f00;color:#fff;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:bold;}
   button:hover {background:#ff3333;}
-  #owner-panel, #mod-panel {background:#300;padding:20px;margin:20px 0;border:2px solid #f00;border-radius:8px;}
+  #owner-panel, #mod-panel {background:#300;padding:20px;margin:20px 0;border:2px solid #f00;border-radius:8px;} 
   #audit-log {background:#200;padding:15px;margin:10px 0;border:1px solid #f00;border-radius:6px;max-height:300px;overflow-y:auto;}
   .report {color:#f88;cursor:pointer;font-size:0.9em;}
   .delete, .shake {color:#f00;cursor:pointer;margin-left:15px;}
   .shake {color: orange;} 
-  #raid-alert {background:#800;padding:20px;margin:20px 0;border:3px solid #f00;text-align:center;font-size:1.5em;color:#ff0;}
+  #raid-alert {background:#800;padding:20px;margin:20px 0;border:3px solid #f00;text-align:center;font-size:1.5em;color:#ff0;} 
   #captcha {background:#222;padding:20px;border-radius:8px;text-align:center;margin:20px 0;}
   .cap-btn {width:80px;height:80px;margin:10px;border-radius:12px;cursor:pointer;}
   
@@ -71,7 +71,7 @@
       left: 0;
       width: 100%;
       height: 100%;
-      background: rgba(0, 0, 0, 0.95);
+      background: rgba(0, 0, 0, 0.95); 
       z-index: 1000;
       display: none; 
       text-align: center;
@@ -124,14 +124,15 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref as dbRef, onValue, push, remove, set, runTransaction } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js';
 
+// --- UPDATED FIREBASE CONFIGURATION ---
 const firebaseConfig = {
-  apiKey: "AIzaSyCuje9LHZwow99YpV5LqHtQm2LY3NLOgPM",
-  authDomain: "thugparty1.firebaseapp.com",
-  databaseURL: "https://thugparty1-default-rtdb.firebaseio.com",
-  projectId: "thugparty1",
-  storageBucket: "thugparty1.firebasestorage.app",
-  messagingSenderId: "663564615086",
-  appId: "1:663564615086:web:6b68f41403f5c8e30d1c3f"
+  apiKey: "AIzaSyDl57dHTPSVf81PrAf5rYbiPSTopWheTxg",
+  authDomain: "thugparty2.firebaseapp.com",
+  databaseURL: "https://thugparty2-default-rtdb.firebaseio.com", // Added Database URL
+  projectId: "thugparty2",
+  storageBucket: "thugparty2.firebasestorage.app",
+  messagingSenderId: "878506362972",
+  appId: "1:878506362972:web:12e3adaca55c872f83fe99"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -148,16 +149,16 @@ let accounts = JSON.parse(localStorage.getItem("accounts_clean") || '{"GTAtacotr
 let audit = JSON.parse(localStorage.getItem("audit_clean") || "[]");
 let loggedUsers = JSON.parse(localStorage.getItem("loggedUsers_clean") || "{}");
 
-// --- REVISED SITE STATUS LOGIC ---
-
 // Helper to control visibility of the entire application content
 function setAppVisibility(visible) {
     document.querySelectorAll('.app-content').forEach(el => {
         el.style.visibility = visible ? 'visible' : 'hidden';
-        el.style.display = visible ? '' : 'none';
+        el.style.display = visible ? '' : 'none'; 
     });
 }
 
+// Function to handle the global site status checks
+const statusRef = dbRef(db, 'siteStatus_clean');
 function handleSiteStatus(status) {
     const overlay = document.getElementById('status-overlay');
     const isDown = status.mode === "down" && status.until > Date.now();
@@ -179,20 +180,19 @@ function handleSiteStatus(status) {
     // 2. Normal Mode: Hide overlay and initialize site content
     if (status.mode === "normal") {
         overlay.style.display = 'none';
-        setAppVisibility(true); // Make all app content visible
+        setAppVisibility(true);
 
         if (!myName) {
           showCaptcha();
         } else {
           if (myName === "GTAtacotruck") roles[myName] = "owner";
           
-          // Only render the board if it hasn't been loaded yet
           if (document.getElementById("threads") === null || document.getElementById("content").innerHTML === "") {
               renderBoard("thug");
           }
         }
         
-        // Panel visibility based on role (must check if element exists)
+        // Panel visibility based on role
         const ownerPanel = document.getElementById("owner-panel");
         const modPanel = document.getElementById("mod-panel");
 
@@ -216,13 +216,10 @@ function handleSiteStatus(status) {
 }
 
 // Global listener for site status updates
-const statusRef = dbRef(db, 'siteStatus_clean');
 onValue(statusRef, (snapshot) => {
     const status = snapshot.val() || {mode: "normal", until: 0}; 
     handleSiteStatus(status);
 });
-
-// --- END REVISED SITE STATUS LOGIC ---
 
 function showCaptcha() {
   let div = document.createElement("div");
@@ -245,7 +242,12 @@ function showCaptcha() {
     };
     div.appendChild(b);
   });
-  document.getElementById("content").appendChild(div); 
+  const contentDiv = document.getElementById("content");
+  if (contentDiv && contentDiv.style.display !== 'none') {
+      contentDiv.appendChild(div);
+  } else {
+      document.body.appendChild(div);
+  }
 }
 
 function login() {
@@ -323,11 +325,13 @@ function loadPosts(board) {
     if (data) {
       for (let key in data) {
         let t = data[key];
+        // Filter expired posts from Coalposters
         if (t.expiresAt && Date.now() > t.expiresAt) continue; 
         threads.push({...t, id: key});
       }
     }
     
+    // Sorting: Pinned threads first, then by time
     threads.sort((a, b) => {
         let aPinned = a.pinnedUntil && a.pinnedUntil > Date.now();
         let bPinned = b.pinnedUntil && b.pinnedUntil > Date.now();
@@ -366,7 +370,7 @@ async function createThread() {
   let expiry = roles[myName] === "coal" ? Date.now() + (4 * 60 * 60 * 1000) : null;
 
   let thread = {
-      op:{name:myName, comment, fileUrl, time:Date.now(), verified:accounts[myName]?.verified, score: 0, voters: {}, tombstoned: false},
+      op:{name:myName, comment, fileUrl, time:Date.now(), verified:accounts[myName]?.verified, score: 0, voters: {}, tombstoned: false}, 
       replies:[],
       pinnedUntil: 0,
       expiresAt: expiry 
@@ -404,6 +408,7 @@ function renderThread(thread) {
 function formatComment(post) {
     let comment = post.comment || "";
     
+    // Check for Tombstoning
     if (post.tombstoned) {
         return `<span class="tombstone-text">is user posted illegal material laugh at this loser</span>`;
     }
@@ -444,6 +449,7 @@ function renderPost(post, threadId, isOP = false, replyId = null) {
   
   let isStaff = ["owner","admin","mod"].includes(roles[myName]);
   
+  // Make the name clickable for verification toggle if the current user is staff
   let nameSpan = `<span class="name ${roleClass} ${isStaff ? 'clickable-name' : ''}" 
                       onclick="${isStaff ? `toggleVerification('${post.name}')` : ''}">
                       ${post.name}${roleDisplay} ${verified} ${getTimeRole()}
@@ -501,7 +507,7 @@ function reply(threadId) {
 
 function togglePin(tId, currentlyPinned) {
     if (!["owner","admin","mod"].includes(roles[myName])) return;
-    const pinUntil = currentlyPinned ? 0 : Date.now() + (24 * 60 * 60 * 1000); 
+    const pinUntil = currentlyPinned ? 0 : Date.now() + (24 * 60 * 60 * 1000); // 24 hours
     set(dbRef(db, `posts/${currentBoard}/${tId}/pinnedUntil`), pinUntil);
 }
 
@@ -544,9 +550,9 @@ function tombstonePost(board, threadId, postTime) {
         if (path) {
             runTransaction(dbRef(db, path), (post) => {
                 if (post) {
-                    post.comment = "";
-                    post.fileUrl = "";
-                    post.tombstoned = true;
+                    post.comment = ""; 
+                    post.fileUrl = ""; 
+                    post.tombstoned = true; 
                 }
                 return post;
             }).then(() => {
@@ -557,6 +563,7 @@ function tombstonePost(board, threadId, postTime) {
         }
     }, { once: true });
 }
+
 
 async function vote(tId, pId, type) {
     let path = `posts/${currentBoard}/${tId}` + (pId === 'op' ? '/op' : `/replies/${pId}`);
@@ -573,6 +580,7 @@ async function vote(tId, pId, type) {
             post.score = (post.score || 0) - currentVote + newVote;
             post.voters[myName] = newVote;
 
+            // Handle Role Transitions
             if (post.score <= -100 && roles[post.name] !== "owner") {
                 updateUserRole(post.name, "coal");
             }
