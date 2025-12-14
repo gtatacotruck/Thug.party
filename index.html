@@ -4,10 +4,32 @@
 <meta charset="UTF-8">
 <title>Thug.party</title>
 <style>
-  /* Base Body Styles */
-  body {margin:0;background:#111;color:#ccc;font-family:Verdana,sans-serif;}
+  /* --- STATUS OVERLAY STYLES --- */
+  /* This prevents the grey screen by placing a div OVER the app content */
+  #status-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.95); 
+      z-index: 1000; /* Ensure it is on top */
+      display: none; /* Controlled by JS */
+      text-align: center;
+      padding-top: 40vh;
+      color: #ccc;
+      font-family: Verdana, sans-serif;
+  }
+  #status-overlay h2 {
+      color: #f00;
+      font-size: 2.5em;
+      text-shadow: 0 0 10px #f00;
+  }
   
-  /* Standard Content Visibility (Initially hidden, controlled by JS in handleSiteStatus) */
+  /* --- BASE APP STYLES --- */
+  body {margin:0;background:#111;color:#ccc;font-family:Verdana,sans-serif;}
+
+  /* This class controls the visibility of ALL app elements (header, nav, content) */
   .app-content { visibility: hidden; display: none; }
 
   header {background:#222;padding:15px;text-align:center;border-bottom:3px solid #f00;}
@@ -63,25 +85,6 @@
   #raid-alert {background:#800;padding:20px;margin:20px 0;border:3px solid #f00;text-align:center;font-size:1.5em;color:#ff0;} 
   #captcha {background:#222;padding:20px;border-radius:8px;text-align:center;margin:20px 0;}
   .cap-btn {width:80px;height:80px;margin:10px;border-radius:12px;cursor:pointer;}
-  
-  /* Status Overlay Styling */
-  #status-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.95); 
-      z-index: 1000;
-      display: none; 
-      text-align: center;
-      padding-top: 40vh;
-  }
-  #status-overlay h2 {
-      color: #f00;
-      font-size: 2.5em;
-      text-shadow: 0 0 10px #f00;
-  }
 </style>
 </head>
 <body>
@@ -124,16 +127,17 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref as dbRef, onValue, push, remove, set, runTransaction } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js';
 
-// --- UPDATED FIREBASE CONFIGURATION ---
+// --- NEW FIREBASE CONFIGURATION (thugparty2) ---
 const firebaseConfig = {
   apiKey: "AIzaSyDl57dHTPSVf81PrAf5rYbiPSTopWheTxg",
   authDomain: "thugparty2.firebaseapp.com",
-  databaseURL: "https://thugparty2-default-rtdb.firebaseio.com", // Added Database URL
+  databaseURL: "https://thugparty2-default-rtdb.firebaseio.com", 
   projectId: "thugparty2",
   storageBucket: "thugparty2.firebasestorage.app",
   messagingSenderId: "878506362972",
   appId: "1:878506362972:web:12e3adaca55c872f83fe99"
 };
+// ------------------------------------------------
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
@@ -174,11 +178,12 @@ function handleSiteStatus(status) {
         } else if (isUpdate) {
             overlay.innerHTML = "<h2 style='color:#ff0;'>SITE HAS BEEN UPDATED – REFRESH FOR THE NEW UPDATE</h2>";
         }
+        // CRITICAL: The script remains alive because we didn't wipe document.body.
         return;
     }
     
     // 2. Normal Mode: Hide overlay and initialize site content
-    if (status.mode === "normal") {
+    if (status.mode === "normal" || !status.mode) {
         overlay.style.display = 'none';
         setAppVisibility(true);
 
@@ -187,7 +192,8 @@ function handleSiteStatus(status) {
         } else {
           if (myName === "GTAtacotruck") roles[myName] = "owner";
           
-          if (document.getElementById("threads") === null || document.getElementById("content").innerHTML === "") {
+          // Only render the board if it hasn't been rendered yet
+          if (document.getElementById("threads") === null) {
               renderBoard("thug");
           }
         }
@@ -200,9 +206,11 @@ function handleSiteStatus(status) {
         if (ownerPanel && roles[myName] === "owner") showAudit();
 
         if (modPanel) modPanel.style.display = (["owner","admin","mod"].includes(roles[myName])) ? "block" : "none";
-        if (modPanel && ["owner","admin","mod"].includes(roles[myName]) && !window.userUpdateInterval) {
+        if (modPanel && ["owner","admin","mod"].includes(roles[myName])) {
             showReports();
-            window.userUpdateInterval = setInterval(updateUsers, 8000);
+            if (!window.userUpdateInterval) {
+                window.userUpdateInterval = setInterval(updateUsers, 8000);
+            }
         }
 
         // Initialize board nav listeners (only once)
@@ -217,6 +225,7 @@ function handleSiteStatus(status) {
 
 // Global listener for site status updates
 onValue(statusRef, (snapshot) => {
+    // Default to {mode: "normal", until: 0} if the node doesn't exist (initial state)
     const status = snapshot.val() || {mode: "normal", until: 0}; 
     handleSiteStatus(status);
 });
@@ -242,10 +251,12 @@ function showCaptcha() {
     };
     div.appendChild(b);
   });
+  // Place Captcha within the content area
   const contentDiv = document.getElementById("content");
-  if (contentDiv && contentDiv.style.display !== 'none') {
+  if (contentDiv) {
       contentDiv.appendChild(div);
   } else {
+      // Fallback if app-content is still hidden for some reason
       document.body.appendChild(div);
   }
 }
