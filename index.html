@@ -7,23 +7,42 @@
   body {margin:0;background:#111;color:#ccc;font-family:Verdana,sans-serif;}
   header {background:#222;padding:15px;text-align:center;border-bottom:3px solid #f00;}
   h1 {margin:0;color:#f00;font-size:2.2em;text-shadow:0 0 10px #f00;}
-  nav {background:#1a1a1a;padding:10px;overflow-x:auto;}
-  .board {display:inline-block;margin:8px;padding:12px;background:#222;border:2px solid #444;border-radius:8px;width:180px;cursor:pointer;}
+  nav {background:#1a1a1a;padding:10px;overflow-x:auto;white-space: nowrap;}
+  .board {display:inline-block;margin:8px;padding:12px;background:#222;border:2px solid #444;border-radius:8px;width:180px;cursor:pointer;vertical-align: top;}
   .board:hover {background:#333;border-color:#f00;}
   .desc {display:none;background:#000;padding:8px;border:1px solid #555;margin-top:5px;}
   .board:hover .desc {display:block;}
   #content {padding:20px;}
-  .thread {background:#1e1e1e;margin:20px 0;padding:15px;border:1px solid #444;border-radius:6px;}
+
+  /* Thread/Post Styling for new features */
+  .thread {background:#1e1e1e;margin:20px 0;padding:15px;border:1px solid #444;border-radius:6px; position: relative;}
+  .thread.pinned {border: 2px solid #f00; box-shadow: 0 0 5px rgba(255,0,0,0.5);} /* Pinned style */
   .post {margin:10px 0;padding:12px;background:#262626;border-left:4px solid #777;border-radius:4px;}
   .op {border-left:8px solid #f00;}
+
+  /* Role Styles */
   .name {font-weight:bold;}
   .owner {color:#f00;font-weight:bold;}
   .admin {color:#0ff;}
-  .jannie {color:#ff0;}
+  .mod {color:#ff0;} /* Used Jannie class as mod for consistency */
+  .coal {color: #555; font-style: italic;} /* NOTORIOUS COALPOSTER */
   .verified {color:#0f0;}
   .time-role {font-size:0.85em;color:#888;}
+
+  /* Text Formatting */
+  .greentext {color: #789922;} /* Standard 4chan greentext color */
+  .colored-text {display: block; margin-top: 5px; margin-bottom: 5px;}
+  
+  /* Voting UI */
+  .vote-box {display: inline-flex; align-items: center; margin-right: 15px; background: #111; padding: 2px 8px; border-radius: 4px; float: right; margin-left: 10px;}
+  .vote-btn {cursor: pointer; padding: 0 5px; font-weight: bold; user-select: none;}
+  .vote-btn:hover {color: #fff;}
+  .up {color: #0f0;} .down {color: #f44;}
+  .count {margin: 0 8px; font-size: 0.9em; font-family: monospace;}
+  .pin-action {color:#0f0; cursor:pointer; margin-left:10px;}
+
   form {margin:25px 0;background:#222;padding:15px;border-radius:6px;}
-  input, textarea {width:100%;background:#333;color:#fff;border:1px solid #555;padding:8px;margin:8px 0;border-radius:4px;}
+  input, textarea {width:100%;background:#333;color:#fff;border:1px solid #555;padding:8px;margin:8px 0;border-radius:4px; box-sizing: border-box;}
   button {background:#f00;color:#fff;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:bold;}
   button:hover {background:#ff3333;}
   #owner-panel, #mod-panel {background:#300;padding:20px;margin:20px 0;border:2px solid #f00;border-radius:8px;display:none;}
@@ -38,7 +57,7 @@
 <body>
 <header><h1>Thug.party</h1></header>
 <nav>
-  <div class="board" data-board="qa"><strong>/qa/</strong><div class="desc">Questions & Answers</div></div>
+  <div class="board" data-board="rules"><strong>/rules/</strong><div class="desc">The Law</div></div> <div class="board" data-board="qa"><strong>/qa/</strong><div class="desc">Questions & Answers</div></div>
   <div class="board" data-board="thug"><strong>/thug/</strong><div class="desc">General thug discussion</div></div>
   <div class="board" data-board="pol"><strong>/pol/</strong><div class="desc">Politically Incorrect</div></div>
   <div class="board" data-board="shit"><strong>/shit/</strong><div class="desc">Shitposting</div></div>
@@ -68,7 +87,7 @@
 
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-import { getDatabase, ref, onValue, push } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+import { getDatabase, ref, onValue, push, remove, set, runTransaction } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCuje9LHZwow99YpV5LqHtQm2LY3NLOgPM",
@@ -85,9 +104,8 @@ const db = getDatabase(app);
 
 let myName = localStorage.getItem("currentUser_clean");
 let currentBoard = "thug";
-const boards = ["qa","thug","pol","shit","raid","spam"];
+const boards = ["rules", "qa","thug","pol","shit","raid","spam"]; 
 
-let posts = {}; // Firebase will populate this
 let reports = JSON.parse(localStorage.getItem("reports_clean") || "[]");
 let roles = JSON.parse(localStorage.getItem("roles_clean") || '{"GTAtacotruck":"owner"}');
 let accounts = JSON.parse(localStorage.getItem("accounts_clean") || '{"GTAtacotruck":{"pass":"her0in","verified":true}}');
@@ -169,16 +187,35 @@ function getTimeRole() {
 
 function renderBoard(board) {
   currentBoard = board;
-  let html = `<h2>/${board}/</h2>
-    <p>You are: ${myName} ${accounts[myName]?.verified ? "(verified)" : "(unverified)"} <button onclick="logout()">Logout</button></p>
-    <form id="newthread">
-      Name: <input id="name" value="${myName}" readonly><br>
-      Comment: <textarea id="comment"></textarea><br>
-      File: <input type="file" id="file"><br>
-      <button type="button" onclick="createThread()">Post</button>
-    </form><div id="threads"></div>`;
+  let html = `<h2>/${board}/</h2>`;
+  
+  if (board === "rules") {
+      html += `<div class="thread">
+          <h3>Community Rules</h3>
+          <p>This is a place for discussion. Respect the law and the channel.</p>
+          <ul>
+              <li>Do not post illegal content or gore.</li>
+              <li>Do not post irrelevant things in the wrong channel.</li>
+              <li>Posts by NOTORIOUS COALPOSTERS expire in 4 hours.</li>
+              <li>Getting -100 score makes you a COALPOSTER; getting +20 score removes it.</li>
+              <li>**Formatting:** Use &lt;#RRGGBB&gt; for custom color, or &gt; at the start of a line for greentext.</li>
+          </ul>
+      </div>`;
+  } else {
+      let isCoalposter = roles[myName] === "coal";
+      let statusText = isCoalposter ? `You are: ${myName} <span class="coal">[NOTORIOUS COALPOSTER]</span>` : `You are: ${myName}`;
+
+      html += `<p>${statusText} ${accounts[myName]?.verified ? "(verified)" : "(unverified)"} <button onclick="logout()">Logout</button></p>
+      <form id="newthread">
+        Name: <input id="name" value="${myName}" readonly><br>
+        Comment: <textarea id="comment" placeholder="${isCoalposter ? 'Your posts will expire in 4 hours...' : ''}"></textarea><br>
+        File: <input type="file" id="file"><br>
+        <button type="button" onclick="createThread()">Post</button>
+      </form><div id="threads"></div>`;
+  }
+  
   document.getElementById("content").innerHTML = html;
-  loadPosts(board);
+  if (board !== "rules") loadPosts(board);
 }
 
 function loadPosts(board) {
@@ -188,12 +225,27 @@ function loadPosts(board) {
     let threads = [];
     if (data) {
       for (let key in data) {
-        threads.push({...data[key], id: key});
+        let t = data[key];
+        // Filter expired posts from Coalposters
+        if (t.expiresAt && Date.now() > t.expiresAt) continue; 
+        threads.push({...t, id: key});
       }
     }
+    
+    // Sorting: Pinned threads first, then by time
+    threads.sort((a, b) => {
+        let aPinned = a.pinnedUntil && a.pinnedUntil > Date.now();
+        let bPinned = b.pinnedUntil && b.pinnedUntil > Date.now();
+        if (aPinned && !bPinned) return -1;
+        if (!aPinned && bPinned) return 1;
+        return b.op.time - a.op.time;
+    });
+    
     let threadsDiv = document.getElementById("threads");
-    threadsDiv.innerHTML = "";
-    threads.forEach(renderThread);
+    if (threadsDiv) {
+        threadsDiv.innerHTML = "";
+        threads.forEach(renderThread);
+    }
   });
 }
 
@@ -202,32 +254,99 @@ function createThread() {
   if (!comment) return;
   let file = document.getElementById("file").files[0];
   let fileUrl = file ? URL.createObjectURL(file) : "";
-  let thread = {op:{name:myName, comment, fileUrl, time:Date.now(), verified:accounts[myName]?.verified}, replies:[]};
+  
+  let expiry = roles[myName] === "coal" ? Date.now() + (4 * 60 * 60 * 1000) : null;
+
+  let thread = {
+      op:{name:myName, comment, fileUrl, time:Date.now(), verified:accounts[myName]?.verified, score: 0, voters: {}},
+      replies:[],
+      pinnedUntil: 0,
+      expiresAt: expiry // Coalposter expiry
+  };
   push(ref(db, 'posts/' + currentBoard), thread);
   document.getElementById("comment").value = "";
   document.getElementById("file").value = "";
 }
 
 function renderThread(thread) {
+  const isPinned = thread.pinnedUntil && thread.pinnedUntil > Date.now();
   let div = document.createElement("div");
-  div.className = "thread";
-  div.innerHTML = renderPost(thread.op, thread.id, true);
-  if (thread.replies) thread.replies.forEach(r => div.innerHTML += renderPost(r, thread.id));
+  div.className = `thread ${isPinned ? 'pinned' : ''}`;
+  
+  // Pin button for staff
+  let pinButton = "";
+  if (["owner","admin","mod"].includes(roles[myName])) {
+    pinButton = `<span class="pin-action" onclick="togglePin('${thread.id}', ${isPinned})">${isPinned ? '[Unpin]' : '[Pin 24h]'}</span>`;
+  }
+  
+  div.innerHTML = (isPinned ? `<b style="color:red">[PINNED]</b> ` : "") + renderPost(thread.op, thread.id, true) + pinButton;
+  
+  if (thread.replies) {
+      Object.entries(thread.replies).forEach(([rId, r]) => {
+          // Check for reply expiry as well
+          if (r.expiresAt && Date.now() > r.expiresAt) return;
+          div.innerHTML += renderPost(r, thread.id, false, rId);
+      });
+  }
+
   div.innerHTML += `<form><input value="${myName}" readonly id="rname${thread.id}">
     <textarea id="rcomment${thread.id}"></textarea>
     <button type="button" onclick="reply('${thread.id}')">Post</button></form>`;
   document.getElementById("threads").appendChild(div);
 }
 
-function renderPost(post, threadId, isOP = false) {
-  let role = roles[post.name] || "";
+function formatComment(comment) {
+    let content = comment.replace(/\n/g, '<br>');
+    let colorTagMatch = content.match(/^&lt;#([0-9a-fA-F]{6})&gt;/i);
+    let hexColor = null;
+
+    if (colorTagMatch) {
+        hexColor = '#' + colorTagMatch[1];
+        // Remove the color tag from the displayed content
+        content = content.substring(colorTagMatch[0].length);
+    }
+    
+    // Process Greentext
+    let lines = content.split('<br>');
+    let formattedLines = lines.map(line => {
+        if (line.trim().startsWith('>')) {
+            return `<span class="greentext">${line}</span>`;
+        }
+        return line;
+    });
+
+    content = formattedLines.join('<br>');
+    
+    // Apply Hex Color if found
+    if (hexColor) {
+        content = `<span class="colored-text" style="color:${hexColor}">${content}</span>`;
+    }
+    
+    return content;
+}
+
+function renderPost(post, threadId, isOP = false, replyId = null) {
+  let role = roles[post.name] || "user";
   let verified = post.verified ? "(verified)" : "(unverified)";
-  let color = role === "owner" ? "owner" : (role === "admin" || role === "mod") ? "admin" : "";
+  let roleClass = role === "owner" ? "owner" : role === "admin" ? "admin" : role === "mod" ? "mod" : role === "coal" ? "coal" : "";
+  let roleDisplay = role === "coal" ? " [NOTORIOUS COALPOSTER]" : role ? ` [${role}]` : "";
+  let postId = replyId ? replyId : "op";
+  let score = post.score || 0;
+  
+  let voteHtml = `<div class="vote-box">
+        <span class="vote-btn up" onclick="vote('${threadId}','${postId}','up')">▲</span>
+        <span class="count" style="color:${score >= 0 ? '#0f0' : '#f44'}">${score}</span>
+        <span class="vote-btn down" onclick="vote('${threadId}','${postId}','down')">▼</span>
+    </div>`;
+    
+  let postContent = formatComment(post.comment); // Use the new formatting function
+
   return `<div class="post ${isOP ? 'op' : ''}">
-    <span class="name ${color}">${post.name} ${role ? '['+role+']' : ''} ${verified} ${getTimeRole()}</span>
+    ${voteHtml}
+    <span class="name ${roleClass}">${post.name}${roleDisplay} ${verified} ${getTimeRole()}</span>
     <span>${new Date(post.time).toLocaleString()}</span>
     ${post.fileUrl ? `<img src="${post.fileUrl}" style="max-width:300px"><br>` : ''}
-    <p>${post.comment.replace(/\n/g,'<br>')}</p>
+    <p>${postContent}</p>
     <span class="report" onclick="reportPost('${threadId}',${post.time})">Report</span>
     ${(roles[myName] && ["owner","admin","mod"].includes(roles[myName]))? `<span class="delete" onclick="deletePost('${currentBoard}','${threadId}',${post.time})">Delete</span>` : ''}
   </div>`;
@@ -236,9 +355,59 @@ function renderPost(post, threadId, isOP = false) {
 function reply(threadId) {
   let comment = document.getElementById("rcomment" + threadId).value.trim();
   if (!comment) return;
-  let reply = {name:myName, comment, time:Date.now(), verified:accounts[myName]?.verified};
+
+  let expiry = roles[myName] === "coal" ? Date.now() + (4 * 60 * 60 * 1000) : null;
+  
+  let reply = {
+      name:myName, 
+      comment, 
+      time:Date.now(), 
+      verified:accounts[myName]?.verified, 
+      score: 0, 
+      voters: {}, 
+      expiresAt: expiry
+  };
   push(ref(db, 'posts/' + currentBoard + '/' + threadId + '/replies'), reply);
   document.getElementById("rcomment" + threadId).value = "";
+}
+
+function togglePin(tId, currentlyPinned) {
+    if (!["owner","admin","mod"].includes(roles[myName])) return;
+    const pinUntil = currentlyPinned ? 0 : Date.now() + (24 * 60 * 60 * 1000); // 24 hours
+    set(ref(db, `posts/${currentBoard}/${tId}/pinnedUntil`), pinUntil);
+}
+
+async function vote(tId, pId, type) {
+    let path = `posts/${currentBoard}/${tId}` + (pId === 'op' ? '/op' : `/replies/${pId}`);
+    const postRef = ref(db, path);
+    
+    await runTransaction(postRef, (post) => {
+        if (post) {
+            if (!post.voters) post.voters = {};
+            let currentVote = post.voters[myName] || 0;
+            let newVote = type === 'up' ? 1 : -1;
+
+            if (currentVote === newVote) return; 
+
+            post.score = (post.score || 0) - currentVote + newVote;
+            post.voters[myName] = newVote;
+
+            // Handle Role Transitions
+            if (post.score <= -100 && roles[post.name] !== "owner") {
+                updateUserRole(post.name, "coal");
+            }
+            if (post.score >= 20 && roles[post.name] === "coal") {
+                updateUserRole(post.name, "user");
+            }
+        }
+        return post;
+    });
+}
+
+function updateUserRole(targetName, newRole) {
+  roles[targetName] = newRole;
+  localStorage.setItem("roles_clean", JSON.stringify(roles));
+  if (targetName === myName) location.reload(); 
 }
 
 function reportPost(threadId, postTime) {
@@ -255,10 +424,13 @@ function deletePost(board, threadId, postTime) {
     if (!data) return;
 
     if (data.op.time === postTime) {
-      postRef.remove();
+      remove(postRef);
     } else if (data.replies) {
-      let filtered = Object.values(data.replies).filter(r => r.time !== postTime);
-      postRef.child("replies").set(filtered);
+      let entries = Object.entries(data.replies);
+      let targetEntry = entries.find(([key, val]) => val.time === postTime);
+      if (targetEntry) {
+          remove(ref(db, `posts/${board}/${threadId}/replies/${targetEntry[0]}`));
+      }
     }
 
     audit.push(`${myName} deleted post ${postTime} on /${board}/`);
@@ -282,8 +454,10 @@ function showReports() {
 
 function showAudit() {
   if (roles[myName] !== "owner") return;
-  document.getElementById("audit-log").innerHTML =
-    "<strong>Audit Log</strong><br>" + audit.slice(-50).join("<br>");
+  const logDiv = document.getElementById("audit-log");
+  if (logDiv) {
+      logDiv.innerHTML = "<strong>Audit Log</strong><br>" + audit.slice(-50).join("<br>");
+  }
 }
 
 function updateUsers() {
@@ -319,17 +493,32 @@ function normalMode() {
 function clearAllPosts() {
   if (roles[myName] !== "owner") return;
   if (!confirm("Wipe everything?")) return;
-  boards.forEach(b => ref(db, 'posts/' + b).remove());
+  boards.forEach(b => remove(ref(db, 'posts/' + b)));
 }
 
 function grantRole() {
   if (roles[myName] !== "owner") return;
   let name = prompt("User:");
-  let role = prompt("Role (mod/admin):");
+  let role = prompt("Role (mod/admin/coal/user):");
   if (!name || !role) return;
   roles[name] = role;
   localStorage.setItem("roles_clean", JSON.stringify(roles));
 }
+
+/* EXPOSE TO GLOBAL SCOPE */
+window.logout = logout;
+window.createThread = createThread;
+window.reply = reply;
+window.reportPost = reportPost;
+window.deletePost = deletePost;
+window.siteDown = siteDown;
+window.updateMode = updateMode;
+window.normalMode = normalMode;
+window.clearAllPosts = clearAllPosts;
+window.grantRole = grantRole;
+window.dismissRaid = () => { document.getElementById('raid-alert').style.display = 'none'; };
+window.vote = vote;
+window.togglePin = togglePin;
 
 /* PANELS */
 
