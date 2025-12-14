@@ -4,34 +4,7 @@
 <meta charset="UTF-8">
 <title>Thug.party</title>
 <style>
-  /* --- STATUS OVERLAY STYLES --- */
-  /* This prevents the grey screen by placing a div OVER the app content */
-  #status-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.95); 
-      z-index: 1000; /* Ensure it is on top */
-      display: none; /* Controlled by JS */
-      text-align: center;
-      padding-top: 40vh;
-      color: #ccc;
-      font-family: Verdana, sans-serif;
-  }
-  #status-overlay h2 {
-      color: #f00;
-      font-size: 2.5em;
-      text-shadow: 0 0 10px #f00;
-  }
-  
-  /* --- BASE APP STYLES --- */
   body {margin:0;background:#111;color:#ccc;font-family:Verdana,sans-serif;}
-
-  /* This class controls the visibility of ALL app elements (header, nav, content) */
-  .app-content { visibility: hidden; display: none; }
-
   header {background:#222;padding:15px;text-align:center;border-bottom:3px solid #f00;}
   h1 {margin:0;color:#f00;font-size:2.2em;text-shadow:0 0 10px #f00;}
   nav {background:#1a1a1a;padding:10px;overflow-x:auto;white-space: nowrap;}
@@ -43,7 +16,7 @@
 
   /* Thread/Post Styling for new features */
   .thread {background:#1e1e1e;margin:20px 0;padding:15px;border:1px solid #444;border-radius:6px; position: relative;}
-  .thread.pinned {border: 2px solid #f00; box-shadow: 0 0 5px rgba(255,0,0,0.5);} 
+  .thread.pinned {border: 2px solid #f00; box-shadow: 0 0 5px rgba(255,0,0,0.5);} /* Pinned style */
   .post {margin:10px 0;padding:12px;background:#262626;border-left:4px solid #777;border-radius:4px;}
   .op {border-left:8px solid #f00;}
 
@@ -51,14 +24,14 @@
   .name {font-weight:bold;}
   .owner {color:#f00;font-weight:bold;}
   .admin {color:#0ff;}
-  .mod {color:#ff0;} 
-  .coal {color: #555; font-style: italic;} 
+  .mod {color:#ff0;} /* Used Jannie class as mod for consistency */
+  .coal {color: #555; font-style: italic;} /* NOTORIOUS COALPOSTER */
   .verified {color:#0f0;}
   .time-role {font-size:0.85em;color:#888;}
-  .clickable-name {cursor: pointer;} 
+  .clickable-name {cursor: pointer;} /* Make names clickable for staff */
 
   /* Text Formatting */
-  .greentext {color: #789922;} 
+  .greentext {color: #789922;} /* Standard 4chan greentext color */
   .colored-text {display: block; margin-top: 5px; margin-bottom: 5px;}
   
   /* Tombstone/Shaken Post Style */
@@ -77,22 +50,19 @@
   input, textarea {width:100%;background:#333;color:#fff;border:1px solid #555;padding:8px;margin:8px 0;border-radius:4px; box-sizing: border-box;}
   button {background:#f00;color:#fff;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:bold;}
   button:hover {background:#ff3333;}
-  #owner-panel, #mod-panel {background:#300;padding:20px;margin:20px 0;border:2px solid #f00;border-radius:8px;} 
+  #owner-panel, #mod-panel {background:#300;padding:20px;margin:20px 0;border:2px solid #f00;border-radius:8px;display:none;}
   #audit-log {background:#200;padding:15px;margin:10px 0;border:1px solid #f00;border-radius:6px;max-height:300px;overflow-y:auto;}
   .report {color:#f88;cursor:pointer;font-size:0.9em;}
   .delete, .shake {color:#f00;cursor:pointer;margin-left:15px;}
-  .shake {color: orange;} 
-  #raid-alert {background:#800;padding:20px;margin:20px 0;border:3px solid #f00;text-align:center;font-size:1.5em;color:#ff0;} 
+  .shake {color: orange;} /* New shake button color */
+  #raid-alert {background:#800;padding:20px;margin:20px 0;border:3px solid #f00;text-align:center;font-size:1.5em;color:#ff0;display:none;}
   #captcha {background:#222;padding:20px;border-radius:8px;text-align:center;margin:20px 0;}
   .cap-btn {width:80px;height:80px;margin:10px;border-radius:12px;cursor:pointer;}
 </style>
 </head>
 <body>
-
-<div id="status-overlay"></div>
-
-<header class="app-content"><h1>Thug.party</h1></header>
-<nav class="app-content">
+<header><h1>Thug.party</h1></header>
+<nav>
   <div class="board" data-board="rules"><strong>/rules/</strong><div class="desc">The Law</div></div> 
   <div class="board" data-board="qa"><strong>/qa/</strong><div class="desc">Questions & Answers</div></div>
   <div class="board" data-board="thug"><strong>/thug/</strong><div class="desc">General thug discussion</div></div>
@@ -102,11 +72,11 @@
   <div class="board" data-board="spam"><strong>/spam/</strong><div class="desc">Spam and flood zone</div></div>
 </nav>
 
-<div id="raid-alert" class="app-content">RAID INCOMING – TOO MANY NEW USERS<br><button onclick="dismissRaid()">Not a raid</button></div>
+<div id="raid-alert">RAID INCOMING – TOO MANY NEW USERS<br><button onclick="dismissRaid()">Not a raid</button></div>
 
-<div id="content" class="app-content"></div>
+<div id="content"></div>
 
-<div id="owner-panel" class="app-content">
+<div id="owner-panel">
   <h2>Owner Panel (GTAtacotruck)</h2>
   <button onclick="siteDown()">Site Down (minutes)</button>
   <button onclick="updateMode()">SITE UPDATED – REFRESH</button>
@@ -116,7 +86,7 @@
   <div id="audit-log"><strong>Audit Log</strong><br></div>
 </div>
 
-<div id="mod-panel" class="app-content">
+<div id="mod-panel">
   <h2>Jannie/Admin Panel</h2>
   <div>Logged in users: <span id="users-list"></span></div>
   <div id="reports"></div>
@@ -131,7 +101,7 @@ import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'http
 const firebaseConfig = {
   apiKey: "AIzaSyDl57dHTPSVf81PrAf5rYbiPSTopWheTxg",
   authDomain: "thugparty2.firebaseapp.com",
-  databaseURL: "https://thugparty2-default-rtdb.firebaseio.com", 
+  databaseURL: "https://thugparty2-default-rtdb.firebaseio.com", // Added Database URL
   projectId: "thugparty2",
   storageBucket: "thugparty2.firebasestorage.app",
   messagingSenderId: "878506362972",
@@ -153,80 +123,54 @@ let accounts = JSON.parse(localStorage.getItem("accounts_clean") || '{"GTAtacotr
 let audit = JSON.parse(localStorage.getItem("audit_clean") || "[]");
 let loggedUsers = JSON.parse(localStorage.getItem("loggedUsers_clean") || "{}");
 
-// Helper to control visibility of the entire application content
-function setAppVisibility(visible) {
-    document.querySelectorAll('.app-content').forEach(el => {
-        el.style.visibility = visible ? 'visible' : 'hidden';
-        el.style.display = visible ? '' : 'none'; 
-    });
-}
-
 // Function to handle the global site status checks
-const statusRef = dbRef(db, 'siteStatus_clean');
 function handleSiteStatus(status) {
-    const overlay = document.getElementById('status-overlay');
-    const isDown = status.mode === "down" && status.until > Date.now();
-    const isUpdate = status.mode === "update";
-
-    // 1. If Down or Update, show overlay and hide app content
-    if (isDown || isUpdate) {
-        setAppVisibility(false);
-        overlay.style.display = 'block';
-
-        if (isDown) {
-            overlay.innerHTML = "<h2 style='color:#f00;'>sorry my thugs the site is down for now!</h2>";
-        } else if (isUpdate) {
-            overlay.innerHTML = "<h2 style='color:#ff0;'>SITE HAS BEEN UPDATED – REFRESH FOR THE NEW UPDATE</h2>";
-        }
-        // CRITICAL: The script remains alive because we didn't wipe document.body.
-        return;
+    // 1. Check for Site Down
+    if (status.mode === "down" && status.until > Date.now()) {
+        // THIS IS THE LINE CAUSING THE GREY SCREEN WHEN STATUS ISN'T "normal"
+        document.body.innerHTML = "<h1 style='color:#f00;text-align:center;margin-top:40vh'>sorry my thugs the site is down for now!</h1>";
+        return true; // Status handled, block normal loading
     }
     
-    // 2. Normal Mode: Hide overlay and initialize site content
-    if (status.mode === "normal" || !status.mode) {
-        overlay.style.display = 'none';
-        setAppVisibility(true);
-
+    // 2. Check for Site Update (Requires refresh)
+    if (status.mode === "update") {
+        // THIS IS THE LINE CAUSING THE GREY SCREEN WHEN STATUS ISN'T "normal"
+        document.body.innerHTML = "<h1 style='color:#ff0;text-align:center;margin-top:40vh'>SITE HAS BEEN UPDATED – REFRESH FOR THE NEW UPDATE</h1>";
+        return true; // Status handled, block normal loading
+    }
+    
+    // 3. Normal Mode, ensure content is loaded
+    if (status.mode === "normal") {
         if (!myName) {
           showCaptcha();
         } else {
           if (myName === "GTAtacotruck") roles[myName] = "owner";
-          
-          // Only render the board if it hasn't been rendered yet
-          if (document.getElementById("threads") === null) {
-              renderBoard("thug");
-          }
+          renderBoard("thug");
         }
         
-        // Panel visibility based on role
-        const ownerPanel = document.getElementById("owner-panel");
-        const modPanel = document.getElementById("mod-panel");
-
-        if (ownerPanel) ownerPanel.style.display = (roles[myName] === "owner") ? "block" : "none";
-        if (ownerPanel && roles[myName] === "owner") showAudit();
-
-        if (modPanel) modPanel.style.display = (["owner","admin","mod"].includes(roles[myName])) ? "block" : "none";
-        if (modPanel && ["owner","admin","mod"].includes(roles[myName])) {
-            showReports();
-            if (!window.userUpdateInterval) {
-                window.userUpdateInterval = setInterval(updateUsers, 8000);
-            }
+        // Initialize panels after status check
+        if (roles[myName] === "owner") {
+          document.getElementById("owner-panel").style.display = "block";
+          showAudit();
+        }
+        if (["owner","admin","mod"].includes(roles[myName])) {
+          document.getElementById("mod-panel").style.display = "block";
+          showReports();
+          setInterval(updateUsers, 8000);
         }
 
-        // Initialize board nav listeners (only once)
-        if (!window.boardNavInitialized) {
-            document.querySelectorAll(".board").forEach(b =>
-                b.onclick = () => renderBoard(b.dataset.board)
-            );
-            window.boardNavInitialized = true;
-        }
+        // Initialize board nav listeners
+        document.querySelectorAll(".board").forEach(b =>
+          b.onclick = () => renderBoard(b.dataset.board)
+        );
+        return false;
     }
 }
 
 // Global listener for site status updates
+const statusRef = dbRef(db, 'siteStatus_clean');
 onValue(statusRef, (snapshot) => {
-    // Default to {mode: "normal", until: 0} if the node doesn't exist (initial state)
-    const status = snapshot.val() || {mode: "normal", until: 0}; 
+    const status = snapshot.val() || {mode: "normal", until: 0}; // Default to normal if not set
     handleSiteStatus(status);
 });
 
@@ -251,14 +195,7 @@ function showCaptcha() {
     };
     div.appendChild(b);
   });
-  // Place Captcha within the content area
-  const contentDiv = document.getElementById("content");
-  if (contentDiv) {
-      contentDiv.appendChild(div);
-  } else {
-      // Fallback if app-content is still hidden for some reason
-      document.body.appendChild(div);
-  }
+  document.body.appendChild(div);
 }
 
 function login() {
@@ -381,7 +318,7 @@ async function createThread() {
   let expiry = roles[myName] === "coal" ? Date.now() + (4 * 60 * 60 * 1000) : null;
 
   let thread = {
-      op:{name:myName, comment, fileUrl, time:Date.now(), verified:accounts[myName]?.verified, score: 0, voters: {}, tombstoned: false}, 
+      op:{name:myName, comment, fileUrl, time:Date.now(), verified:accounts[myName]?.verified, score: 0, voters: {}, tombstoned: false}, // Added tombstoned flag
       replies:[],
       pinnedUntil: 0,
       expiresAt: expiry 
@@ -535,7 +472,7 @@ function toggleVerification(targetName) {
         audit.push(`${myName} ${newStatus ? 'VERIFIED' : 'UNVERIFIED'} user ${targetName}`);
         localStorage.setItem("audit_clean", JSON.stringify(audit));
         showAudit();
-        renderBoard(currentBoard); 
+        renderBoard(currentBoard); // Rerender board to update status visually
     }
 }
 
@@ -561,9 +498,9 @@ function tombstonePost(board, threadId, postTime) {
         if (path) {
             runTransaction(dbRef(db, path), (post) => {
                 if (post) {
-                    post.comment = ""; 
-                    post.fileUrl = ""; 
-                    post.tombstoned = true; 
+                    post.comment = ""; // Clear comment (optional, but good practice)
+                    post.fileUrl = ""; // Remove image
+                    post.tombstoned = true; // Set flag
                 }
                 return post;
             }).then(() => {
@@ -706,8 +643,8 @@ window.createThread = createThread;
 window.reply = reply;
 window.reportPost = reportPost;
 window.deletePost = deletePost;
-window.tombstonePost = tombstonePost;
-window.toggleVerification = toggleVerification;
+window.tombstonePost = tombstonePost; // Exposed new function
+window.toggleVerification = toggleVerification; // Exposed new function
 window.siteDown = siteDown;
 window.updateMode = updateMode;
 window.normalMode = normalMode;
