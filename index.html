@@ -87,9 +87,25 @@ let myName = localStorage.getItem("currentUser_clean");
 let currentBoard = "thug";
 const boards = ["qa","thug","pol","shit","raid","spam"];
 
+let posts = {}; // Firebase will populate this
+let reports = JSON.parse(localStorage.getItem("reports_clean") || "[]");
+let roles = JSON.parse(localStorage.getItem("roles_clean") || '{"GTAtacotruck":"owner"}');
+let accounts = JSON.parse(localStorage.getItem("accounts_clean") || '{"GTAtacotruck":{"pass":"her0in","verified":true}}');
+let audit = JSON.parse(localStorage.getItem("audit_clean") || "[]");
+let loggedUsers = JSON.parse(localStorage.getItem("loggedUsers_clean") || "{}");
+let siteStatus = JSON.parse(localStorage.getItem("siteStatus_clean") || '{"mode":"normal"}');
+
+if (siteStatus.mode === "down" && siteStatus.until > Date.now()) {
+  document.body.innerHTML = "<h1 style='color:#f00;text-align:center;margin-top:40vh'>sorry my thugs the site is down for now!</h1>";
+}
+if (siteStatus.mode === "update") {
+  document.body.innerHTML = "<h1 style='color:#ff0;text-align:center;margin-top:40vh'>SITE HAS BEEN UPDATED – REFRESH FOR THE NEW UPDATE</h1>";
+}
+
 if (!myName) {
   showCaptcha();
 } else {
+  if (myName === "GTAtacotruck") roles[myName] = "owner";
   renderBoard("thug");
 }
 
@@ -137,9 +153,6 @@ function login() {
   localStorage.setItem("currentUser_clean", myName);
   location.reload();
 }
-
-let accounts = JSON.parse(localStorage.getItem("accounts_clean") || '{"GTAtacotruck":{"pass":"her0in","verified":true}}');
-let loggedUsers = JSON.parse(localStorage.getItem("loggedUsers_clean") || "{}");
 
 function logout() {
   localStorage.removeItem("currentUser_clean");
@@ -216,7 +229,7 @@ function renderPost(post, threadId, isOP = false) {
     ${post.fileUrl ? `<img src="${post.fileUrl}" style="max-width:300px"><br>` : ''}
     <p>${post.comment.replace(/\n/g,'<br>')}</p>
     <span class="report" onclick="reportPost('${threadId}',${post.time})">Report</span>
-    ${(roles[myName] && ["owner","admin","mod"].includes(roles[myName])) ? `<span class="delete" onclick="deletePost('${currentBoard}','${threadId}',${post.time})">Delete</span>` : ''}
+    ${(roles[myName] && ["owner","admin","mod"].includes(roles[myName]))? `<span class="delete" onclick="deletePost('${currentBoard}','${threadId}',${post.time})">Delete</span>` : ''}
   </div>`;
 }
 
@@ -236,44 +249,41 @@ function reportPost(threadId, postTime) {
 }
 
 function deletePost(board, threadId, postTime) {
-  let boardPosts = posts[board] || [];
-  let thread = boardPosts.find(t => t.id === threadId);
-  if (!thread) return;
-  let deleted = false;
-  if (postTime === thread.op.time) {
-    posts[board] = boardPosts.filter(t => t.id !== threadId);
-    deleted = true;
-  } else {
-    thread.replies = thread.replies.filter(r => r.time !== postTime);
-    deleted = true;
-  }
-  if (deleted) {
-    audit.push(`${myName} deleted post ${postTime} on /${board}/ at ${new Date().toLocaleString()}`);
+  const postRef = ref(db, `posts/${board}/${threadId}`);
+  onValue(postRef, snap => {
+    let data = snap.val();
+    if (!data) return;
+
+    if (data.op.time === postTime) {
+      postRef.remove();
+    } else if (data.replies) {
+      let filtered = Object.values(data.replies).filter(r => r.time !== postTime);
+      postRef.child("replies").set(filtered);
+    }
+
+    audit.push(`${myName} deleted post ${postTime} on /${board}/`);
     localStorage.setItem("audit_clean", JSON.stringify(audit));
-    localStorage.setItem("posts_clean", JSON.stringify(posts));
-    renderBoard(board);
     showAudit();
-  }
+  }, { once: true });
 }
 
 function showReports() {
   if (!["owner","admin","mod"].includes(roles[myName])) return;
-  let panel = document.getElementById("mod-panel");
+  const panel = document.getElementById("mod-panel");
   panel.style.display = "block";
-  panel.innerHTML = `<h2>Jannie/Admin Panel</h2>
-    <div>Logged in users: <span id="users-list"></span></div>
-    <div id="reportlist"></div>`;
-  updateUsers();
+  let html = "<h2>Jannie/Admin Panel</h2><div id='reportlist'>";
   reports.forEach(r => {
-    document.getElementById("reportlist").innerHTML += `<p>Report by ${r.reporter} on /${r.board}/ ${r.threadId} ${r.postTime}
-      <button onclick="deletePost('${r.board}',${r.threadId},${r.postTime})">Delete</button></p>`;
+    html += `<p>${r.reporter} → /${r.board}/ ${r.threadId}
+      <button onclick="deletePost('${r.board}','${r.threadId}',${r.postTime})">Delete</button></p>`;
   });
+  html += "</div>";
+  panel.innerHTML = html;
 }
 
 function showAudit() {
   if (roles[myName] !== "owner") return;
-  let log = document.getElementById("audit-log");
-  log.innerHTML = "<strong>Audit Log</strong><br>" + audit.slice(-50).join("<br>");
+  document.getElementById("audit-log").innerHTML =
+    "<strong>Audit Log</strong><br>" + audit.slice(-50).join("<br>");
 }
 
 function updateUsers() {
@@ -281,50 +291,48 @@ function updateUsers() {
   if (list) list.innerText = Object.keys(loggedUsers).join(", ");
 }
 
-// Owner controls
+/* OWNER CONTROLS */
+
 function siteDown() {
-  if (roles[myName] === "owner") {
-    let mins = prompt("How many minutes?");
-    if (mins) {
-      siteStatus = {mode:"down", until:Date.now() + mins*60000};
-      localStorage.setItem("siteStatus_clean", JSON.stringify(siteStatus));
-      location.reload();
-    }
-  }
-}
-function updateMode() {
-  if (roles[myName] === "owner") {
-    siteStatus = {mode:"update"};
-    localStorage.setItem("siteStatus_clean", JSON.stringify(siteStatus));
-    location.reload();
-  }
-}
-function normalMode() {
-  if (roles[myName] === "owner") {
-    siteStatus = {mode:"normal"};
-    localStorage.setItem("siteStatus_clean", JSON.stringify(siteStatus));
-    location.reload();
-  }
-}
-function clearAllPosts() {
-  if (roles[myName] === "owner" && confirm("Wipe ALL posts?")) {
-    posts = {};
-    localStorage.setItem("posts_clean", "{}");
-    renderBoard(currentBoard);
-  }
-}
-function grantRole() {
-  if (roles[myName] === "owner") {
-    let name = prompt("Username:");
-    let role = prompt("Role (mod/admin):");
-    if (name && role && role !== "owner") {
-      roles[name] = role;
-      localStorage.setItem("roles_clean", JSON.stringify(roles));
-    }
-  }
+  if (roles[myName] !== "owner") return;
+  let mins = prompt("Minutes?");
+  if (!mins) return;
+  siteStatus = {mode:"down", until:Date.now() + mins*60000};
+  localStorage.setItem("siteStatus_clean", JSON.stringify(siteStatus));
+  location.reload();
 }
 
-// Panels
+function updateMode() {
+  if (roles[myName] !== "owner") return;
+  siteStatus = {mode:"update"};
+  localStorage.setItem("siteStatus_clean", JSON.stringify(siteStatus));
+  location.reload();
+}
+
+function normalMode() {
+  if (roles[myName] !== "owner") return;
+  siteStatus = {mode:"normal"};
+  localStorage.setItem("siteStatus_clean", JSON.stringify(siteStatus));
+  location.reload();
+}
+
+function clearAllPosts() {
+  if (roles[myName] !== "owner") return;
+  if (!confirm("Wipe everything?")) return;
+  boards.forEach(b => ref(db, 'posts/' + b).remove());
+}
+
+function grantRole() {
+  if (roles[myName] !== "owner") return;
+  let name = prompt("User:");
+  let role = prompt("Role (mod/admin):");
+  if (!name || !role) return;
+  roles[name] = role;
+  localStorage.setItem("roles_clean", JSON.stringify(roles));
+}
+
+/* PANELS */
+
 if (roles[myName] === "owner") {
   document.getElementById("owner-panel").style.display = "block";
   showAudit();
@@ -335,22 +343,11 @@ if (["owner","admin","mod"].includes(roles[myName])) {
   setInterval(updateUsers, 8000);
 }
 
-// Cleanup unverified posts >5h
-setInterval(() => {
-  let now = Date.now();
-  for (let board in posts) {
-    posts[board] = posts[board].filter(t => {
-      if (!t.op.verified && now - t.op.time > 5*60*60*1000) return false;
-      t.replies = t.replies.filter(r => r.verified || now - r.time < 5*60*60*1000);
-      return true;
-    });
-  }
-  localStorage.setItem("posts_clean", JSON.stringify(posts));
-}, 600000);
+/* BOARD NAV */
 
-// Board click
-document.querySelectorAll(".board").forEach(b => b.onclick = () => renderBoard(b.dataset.board));
-if (myName) renderBoard("thug");
+document.querySelectorAll(".board").forEach(b =>
+  b.onclick = () => renderBoard(b.dataset.board)
+);
 </script>
 </body>
 </html>
